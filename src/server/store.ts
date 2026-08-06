@@ -11,11 +11,12 @@
 
 import { TASKS as TASKS_SEED, PEOPLE, type Task, type TaskStatus, DEMO_TODAY } from "@/data/proyectos";
 import {
-  EVIDENCE_CATALOG, responsible, INITIATIVES_FULL, SCORES_HISTORY,
+  EVIDENCE_CATALOG, responsible, INITIATIVES_FULL, SCORES_HISTORY, KPI_CATALOG,
   currentAssessment as staticCurrent, previousAssessment as staticPrevious,
-  type AssessmentRecord, type CellScore,
+  type AssessmentRecord, type CellScore, type KpiFull, type InitiativeFull,
 } from "@/data/cmi";
 import { VARIABLES } from "@/data/instrument";
+import { periodIndex, isValidPeriod } from "@/lib/period";
 import type { SessionUser } from "@/lib/session";
 import { can } from "@/lib/permissions";
 
@@ -68,6 +69,25 @@ export type VariableCapture = {
   at: string;                   // ISO
 };
 
+/** Valor de KPI reportado desde la plataforma (se suma a la serie del seed). */
+export type KpiReport = {
+  code: string;
+  period: string;               // "2027-T2" · "2027-S1" · "2027"
+  value: number;
+  note?: string;
+  by: string;
+  at: string;                   // ISO
+};
+
+/** Cambios de una iniciativa hechos desde la plataforma (overlay sobre el seed). */
+export type InitiativeOverride = {
+  progress?: number;                                            // 0–100
+  status?: InitiativeFull["status"];
+  factors?: Record<string, { state: "VERDE" | "AMBAR" | "ROJO"; note?: string; history: string[] }>;
+  logAppends?: { date: string; type: "HITO" | "ALERTA" | "NOTA"; text: string }[];
+  nextMilestone?: { date: string; text: string };
+};
+
 const g = globalThis as unknown as {
   __pgtdTasks?: Task[];
   __pgtdEvidence?: Map<string, EvidenceStatus>;
@@ -77,6 +97,8 @@ const g = globalThis as unknown as {
   __pgtdBaseline?: Map<string, { start: string; due: string }>;
   __pgtdCapture?: Map<string, VariableCapture>;
   __pgtdPublished?: AssessmentRecord | null;
+  __pgtdKpiReports?: Map<string, KpiReport[]>;
+  __pgtdIniOverrides?: Map<string, InitiativeOverride>;
   __pgtdHydrated?: boolean;
 };
 
@@ -96,6 +118,8 @@ if (!g.__pgtdBaseline) {
 
 if (!g.__pgtdCapture) g.__pgtdCapture = new Map();
 if (g.__pgtdPublished === undefined) g.__pgtdPublished = null;
+if (!g.__pgtdKpiReports) g.__pgtdKpiReports = new Map();
+if (!g.__pgtdIniOverrides) g.__pgtdIniOverrides = new Map();
 
 const tasks = () => g.__pgtdTasks!;
 const comments = () => g.__pgtdComments!;
@@ -538,6 +562,194 @@ export function publishCapture(
   return { ok: true, assessment };
 }
 
+/* ═══ Reporte de valores de KPI ═══
+   El responsable de línea reporta los KPI de SU línea; líder y consultor,
+   todos. El valor se suma a la serie del seed (overlay) y el motor —salud,
+   proyección, alertas— lo lee como un punto más. */
+
+const kpiReports = () => g.__pgtdKpiReports!;
+
+export const getKpiReports = (code?: string): KpiReport[] =>
+  code ? (kpiReports().get(code) ?? []) : [...kpiReports().values()].flat();
+
+/** Serie efectiva: seed + valores reportados, ordenada por periodo. */
+export function effectiveKpiSeries(code: string): KpiFull["series"] {
+  const k = KPI_CATALOG.find((x) => x.code === code);
+  if (!k) return [];
+  const reported = (kpiReports().get(code) ?? []).map((r) => ({
+    period: r.period, value: r.value, note: r.note ?? `Reportado por ${r.by}`,
+  }));
+  const merged = [...k.series.filter((s) => !reported.some((r) => r.period === s.period)), ...reported];
+  return merged.sort((a, b) => periodIndex(a.period) - periodIndex(b.period));
+}
+
+export const effectiveKpis = (): KpiFull[] =>
+  KPI_CATALOG.map((k) => ({ ...k, series: effectiveKpiSeries(k.code) }));
+
+export function reportKpi(
+  user: SessionUser,
+  code: string,
+  period: string,
+  value: number,
+  note?: string,
+): { ok: true; report: KpiReport; series: KpiFull["series"] } | { ok: false; status: number; error: string } {
+  const k = KPI_CATALOG.find((x) => x.code === code);
+  if (!k) return { ok: false, status: 404, error: "El indicador no existe en el catálogo." };
+
+  if (!can(user, "report_kpi", k.line)) {
+    return {
+      ok: false, status: 403,
+      error: user.role === "DIRECTIVO"
+        ? "Tu rol es de consulta: no reporta valores de KPI."
+        : `No puedes reportar KPI de la línea 4.${k.line}: tu ámbito es la línea 4.${user.line}.`,
+    };
+  }
+
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return { ok: false, status: 422, error: "El valor debe ser un número no negativo." };
+  }
+  if (typeof period !== "string" || !isValidPeriod(period)) {
+    return { ok: false, status: 422, error: "Periodo inválido. Formatos: 2027 · 2027-S1 · 2027-T3." };
+  }
+  // el periodo no puede ser anterior a la serie del seed (correcciones solo
+  // sobre lo reportado desde la plataforma)
+  const lastSeed = k.series[k.series.length - 1];
+  if (periodIndex(period) < periodIndex(lastSeed.period)) {
+    return {
+      ok: false, status: 422,
+      error: `La serie oficial llega hasta ${lastSeed.period}: los periodos anteriores no se reescriben desde aquí.`,
+    };
+  }
+
+  const report: KpiReport = { code, period, value, note: note?.trim() || undefined, by: user.name, at: new Date().toISOString() };
+  const list = kpiReports().get(code) ?? [];
+  const existing = list.findIndex((r) => r.period === period);
+  if (existing >= 0) list[existing] = report;   // corrección del mismo periodo (auditada)
+  else list.push(report);
+  kpiReports().set(code, list);
+
+  audit(user, "task", code, `KPI ${code}: ${period} = ${value} ${k.unit}${existing >= 0 ? " (corrección)" : ""}`);
+  return { ok: true, report, series: effectiveKpiSeries(code) };
+}
+
+/* ═══ Actualización de iniciativas ═══
+   Avance, estado, factores de éxito (con historial de revisiones), bitácora
+   y próximo hito. El responsable de línea edita SU línea. */
+
+const iniOverrides = () => g.__pgtdIniOverrides!;
+
+export const getInitiativeOverrides = (): Record<string, InitiativeOverride> =>
+  Object.fromEntries(iniOverrides());
+
+/** Iniciativas efectivas: seed + cambios hechos desde la plataforma. */
+export function effectiveInitiatives(): InitiativeFull[] {
+  return INITIATIVES_FULL.map((i) => {
+    const o = iniOverrides().get(i.id);
+    if (!o) return i;
+    return {
+      ...i,
+      progress: o.progress ?? i.progress,
+      status: o.status ?? i.status,
+      nextMilestone: o.nextMilestone ?? i.nextMilestone,
+      log: [...i.log, ...(o.logAppends ?? [])],
+      factors: i.factors.map((f) => {
+        const fo = o.factors?.[f.name];
+        return fo ? { ...f, state: fo.state, note: fo.note ?? f.note, history: fo.history } : f;
+      }),
+    };
+  });
+}
+
+const INI_STATUS: InitiativeFull["status"][] = ["PLANEADA", "EN_CURSO", "EN_RIESGO", "COMPLETADA"];
+const FACTOR_STATES = ["VERDE", "AMBAR", "ROJO"] as const;
+
+export function updateInitiative(
+  user: SessionUser,
+  id: string,
+  patch: {
+    progress?: number;
+    status?: InitiativeFull["status"];
+    factor?: { name: string; state: "VERDE" | "AMBAR" | "ROJO"; note?: string };  // registra una revisión
+    log?: { type: "HITO" | "ALERTA" | "NOTA"; text: string };
+    nextMilestone?: { date: string; text: string };
+  },
+): { ok: true; initiative: InitiativeFull } | { ok: false; status: number; error: string } {
+  const base = INITIATIVES_FULL.find((i) => i.id === id);
+  if (!base) return { ok: false, status: 404, error: "La iniciativa no existe." };
+
+  if (!can(user, "edit_initiatives", base.line)) {
+    return {
+      ok: false, status: 403,
+      error: user.role === "DIRECTIVO"
+        ? "Tu rol es de consulta: no edita iniciativas."
+        : `No puedes editar iniciativas de la línea 4.${base.line}: tu ámbito es la línea 4.${user.line}.`,
+    };
+  }
+
+  const o: InitiativeOverride = iniOverrides().get(id) ?? {};
+  const changes: string[] = [];
+
+  if (patch.progress !== undefined) {
+    if (!Number.isInteger(patch.progress) || patch.progress < 0 || patch.progress > 100) {
+      return { ok: false, status: 422, error: "El avance es un entero 0–100." };
+    }
+    changes.push(`avance → ${patch.progress} %`);
+    o.progress = patch.progress;
+  }
+
+  if (patch.status !== undefined) {
+    if (!INI_STATUS.includes(patch.status)) {
+      return { ok: false, status: 422, error: "Estado de iniciativa inválido." };
+    }
+    changes.push(`estado → ${patch.status}`);
+    o.status = patch.status;
+  }
+
+  if (patch.factor) {
+    const f = base.factors.find((x) => x.name === patch.factor!.name);
+    if (!f) return { ok: false, status: 422, error: "El factor no pertenece a esta iniciativa." };
+    if (!FACTOR_STATES.includes(patch.factor.state)) {
+      return { ok: false, status: 422, error: "Estado de factor inválido (VERDE/AMBAR/ROJO)." };
+    }
+    // registrar la revisión: el estado previo pasa al historial
+    const prevState = o.factors?.[f.name]?.state ?? f.state;
+    const prevHistory = o.factors?.[f.name]?.history ?? f.history;
+    o.factors = {
+      ...o.factors,
+      [f.name]: {
+        state: patch.factor.state,
+        note: patch.factor.note?.trim() || undefined,
+        history: [...prevHistory, prevState],
+      },
+    };
+    changes.push(`factor «${f.name}» → ${patch.factor.state}`);
+  }
+
+  if (patch.log) {
+    if (!["HITO", "ALERTA", "NOTA"].includes(patch.log.type) || !patch.log.text?.trim()) {
+      return { ok: false, status: 422, error: "La bitácora exige tipo (HITO/ALERTA/NOTA) y texto." };
+    }
+    o.logAppends = [...(o.logAppends ?? []), { date: DEMO_TODAY, type: patch.log.type, text: patch.log.text.trim() }];
+    changes.push(`bitácora: ${patch.log.type.toLowerCase()}`);
+  }
+
+  if (patch.nextMilestone) {
+    if (!patch.nextMilestone.date?.trim() || !patch.nextMilestone.text?.trim()) {
+      return { ok: false, status: 422, error: "El próximo hito exige fecha y descripción." };
+    }
+    o.nextMilestone = { date: patch.nextMilestone.date.trim(), text: patch.nextMilestone.text.trim() };
+    changes.push("próximo hito actualizado");
+  }
+
+  if (changes.length === 0) {
+    return { ok: false, status: 422, error: "Nada que actualizar." };
+  }
+
+  iniOverrides().set(id, o);
+  audit(user, "task", id, `iniciativa: ${changes.join(" · ")}`);
+  return { ok: true, initiative: effectiveInitiatives().find((i) => i.id === id)! };
+}
+
 /* ── medición efectiva: la publicada en el store manda sobre el seed ── */
 
 export const publishedAssessment = (): AssessmentRecord | null => g.__pgtdPublished ?? null;
@@ -565,6 +777,8 @@ export function resetStore() {
   g.__pgtdBaseline = new Map(TASKS_SEED.map((t) => [t.id, { start: t.start, due: t.due }]));
   g.__pgtdCapture = new Map();
   g.__pgtdPublished = null;
+  g.__pgtdKpiReports = new Map();
+  g.__pgtdIniOverrides = new Map();
 }
 
 export { DEMO_TODAY, responsible };

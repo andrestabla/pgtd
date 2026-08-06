@@ -17,21 +17,19 @@ import { taskAlerts } from "@/lib/proyectos";
 import {
   effectiveCurrent as currentAssessment,
   effectivePrevious as previousAssessment,
-  publishedAssessment,
+  publishedAssessment, effectiveKpis, effectiveInitiatives,
 } from "@/server/store";
+
+// catálogos EFECTIVOS: el seed + lo escrito desde la plataforma
+const KPIS_EFF = () => effectiveKpis();
+const INIS_EFF = () => effectiveInitiatives();
 
 /* ═══ Utilidades de periodo ═══ */
 
-// Periodos soportados: "2026", "2026-S1", "2026-T3". Se mapean a un índice
-// mensual comparable para calcular rezago y proyecciones.
-export function periodIndex(period: string): number {
-  const m = period.match(/^(\d{4})(?:-([ST])(\d))?$/);
-  if (!m) return 0;
-  const year = Number(m[1]);
-  if (!m[2]) return year * 12 + 6;                       // anual → mitad de año
-  if (m[2] === "S") return year * 12 + (Number(m[3]) === 1 ? 3 : 9);
-  return year * 12 + (Number(m[3]) * 3 - 1);            // trimestre → mes final
-}
+// La conversión periodo → índice mensual vive en lib/period (compartida con
+// el store); se re-exporta aquí por compatibilidad.
+export { periodIndex } from "@/lib/period";
+import { periodIndex } from "@/lib/period";
 
 const FREQ_MONTHS: Record<KpiFull["frequency"], number> = {
   Mensual: 1, Trimestral: 3, Semestral: 6, Anual: 12,
@@ -204,12 +202,12 @@ export type ObjectiveHealth = {
 export function objectiveHealth(objId: string): ObjectiveHealth {
   const obj = CMI_OBJECTIVES.find((o) => o.id === objId)!;
   const healths = obj.kpis
-    .map((c) => KPI_CATALOG.find((k) => k.code === c))
+    .map((c) => KPIS_EFF().find((k) => k.code === c))
     .filter(Boolean)
     .map((k) => kpiHealth(k!));
   const kpiOk = healths.filter((h) => h.semaphore !== "BAD" && h.improving).length;
 
-  const inis = INITIATIVES_FULL.filter((i) => i.cmi === objId);
+  const inis = INIS_EFF().filter((i) => i.cmi === objId);
   const risks = inis.map(initiativeRisk);
   const worst = risks.length
     ? (["CRÍTICO", "ALTO", "MEDIO", "BAJO"] as const).find((l) => risks.some((r) => r.level === l))!
@@ -321,7 +319,7 @@ export function buildAlerts(): Alert[] {
   }
 
   // factores en racha roja
-  for (const i of INITIATIVES_FULL) {
+  for (const i of INIS_EFF()) {
     for (const f of i.factors) {
       if (f.state !== "ROJO") continue;
       const streak = [...f.history].reverse().findIndex((h) => h !== "ROJO");
@@ -340,7 +338,7 @@ export function buildAlerts(): Alert[] {
   }
 
   // KPI en contra y proyección insuficiente
-  for (const k of KPI_CATALOG) {
+  for (const k of KPIS_EFF()) {
     const h = kpiHealth(k);
     if (!h.improving && h.semaphore !== "OK") {
       alerts.push({
@@ -375,7 +373,7 @@ export function buildAlerts(): Alert[] {
   }
 
   // riesgo de iniciativas (desalineación y acciones vencidas)
-  for (const i of INITIATIVES_FULL) {
+  for (const i of INIS_EFF()) {
     const r = initiativeRisk(i);
     for (const d of r.drivers) {
       if (d.text.startsWith("Ejecución presupuestal")) {
@@ -431,8 +429,8 @@ export function buildAlerts(): Alert[] {
 
 export function executiveSummary() {
   const roll = maturityRollup();
-  const risks = INITIATIVES_FULL.map((i) => ({ i, r: initiativeRisk(i) }));
-  const budget = INITIATIVES_FULL.reduce(
+  const risks = INIS_EFF().map((i) => ({ i, r: initiativeRisk(i) }));
+  const budget = INIS_EFF().reduce(
     (a, i) => ({
       planned: a.planned + i.budgetPlanned,
       committed: a.committed + i.budgetCommitted,
@@ -440,11 +438,11 @@ export function executiveSummary() {
     }),
     { planned: 0, committed: 0, executed: 0 },
   );
-  const actions = INITIATIVES_FULL.flatMap((i) => i.actions);
+  const actions = INIS_EFF().flatMap((i) => i.actions);
   const alerts = buildAlerts();
   return {
     maturity: roll,
-    kpis: KPI_CATALOG.map((k) => ({ code: k.code, name: k.name, health: kpiHealth(k) })),
+    kpis: KPIS_EFF().map((k) => ({ code: k.code, name: k.name, health: kpiHealth(k) })),
     initiatives: risks.map(({ i, r }) => ({
       id: i.id, name: i.name, status: i.status, progress: i.progress, risk: r,
     })),
@@ -452,7 +450,7 @@ export function executiveSummary() {
     actions: {
       total: actions.length,
       done: actions.filter((a) => a.status === "HECHA").length,
-      late: INITIATIVES_FULL.flatMap((i) =>
+      late: INIS_EFF().flatMap((i) =>
         i.actions.filter((a) => a.status !== "HECHA" && periodIndex(a.quarter) < DEMO_NOW_INDEX),
       ).length,
     },

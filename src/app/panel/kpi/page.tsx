@@ -3,23 +3,49 @@
 // M4 · Indicadores con ficha completa: definición operativa, fórmula, serie
 // con notas, dueño del dato, fuente, periodicidad y objetivo CMI.
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader, Card } from "@/components/ui";
-import { AccessChip } from "@/components/user-context";
+import { AccessChip, useCan } from "@/components/user-context";
 import { Sparkline } from "@/components/charts";
 import { KPIS, LINES, INITIATIVES, fmtNum } from "@/data/demo";
-import { CMI_OBJECTIVES, responsible } from "@/data/cmi";
+import { CMI_OBJECTIVES, responsible, type KpiFull } from "@/data/cmi";
 import { kpiHealth } from "@/lib/logic";
-import { X, User, Database, CalendarClock, Target, ListChecks, Sigma } from "lucide-react";
+import {
+  X, User, Database, CalendarClock, Target, ListChecks, Sigma,
+  Loader2, PlusCircle, AlertTriangle,
+} from "lucide-react";
+
+const PERIOD_HINT: Record<KpiFull["frequency"], string> = {
+  Mensual: "2027-T1", Trimestral: "2027-T2", Semestral: "2027-S1", Anual: "2027",
+};
 
 export default function KpiPage() {
   const [lineFilter, setLineFilter] = useState<number | null>(null);
   const [open, setOpen] = useState<string | null>(null);
 
+  // serie efectiva: seed + valores reportados desde la plataforma
+  const [eff, setEff] = useState<Record<string, { series: KpiFull["series"]; reported: string[] }>>({});
+  const refetch = useCallback(async () => {
+    try {
+      const res = await fetch("/api/td/kpi");
+      if (!res.ok) return;
+      const j = await res.json();
+      setEff(Object.fromEntries(
+        (j.kpis as (KpiFull & { reportedPeriods: string[] })[]).map((k) => [
+          k.code, { series: k.series, reported: k.reportedPeriods ?? [] },
+        ]),
+      ));
+    } catch { /* seed como respaldo */ }
+  }, []);
+  useEffect(() => { refetch(); }, [refetch]);
+  const seriesOf = (k: { code: string; series: KpiFull["series"] }) =>
+    eff[k.code]?.series ?? k.series;
+
   const list = lineFilter ? KPIS.filter((k) => k.line === lineFilter) : KPIS;
   const kpi = open ? KPIS.find((k) => k.code === open) : null;
-  const health = kpi ? kpiHealth(kpi) : null;
+  const kpiSeries = kpi ? seriesOf(kpi) : [];
+  const health = kpi ? kpiHealth({ ...kpi, series: kpiSeries }) : null;
   const kpiObj = kpi ? CMI_OBJECTIVES.find((o) => o.id === kpi.cmi) : null;
   const kpiInis = kpi ? INITIATIVES.filter((i) => i.kpi === kpi.code) : [];
 
@@ -45,8 +71,9 @@ export default function KpiPage() {
         {/* tarjetas */}
         <div className="grid content-start gap-3.5 sm:grid-cols-2">
           {list.map((k, idx) => {
-            const last = k.series[k.series.length - 1];
-            const prev = k.series[k.series.length - 2];
+            const series = seriesOf(k);
+            const last = series[series.length - 1];
+            const prev = series[series.length - 2];
             const delta = prev ? last.value - prev.value : 0;
             const improving = k.goodDirection === "up" ? delta >= 0 : delta <= 0;
             const toTarget = k.goodDirection === "up"
@@ -70,7 +97,7 @@ export default function KpiPage() {
                     {delta >= 0 ? "▲" : "▼"} {fmtNum(Math.abs(delta), 2)}
                   </span>
                 </div>
-                <div className="mt-1"><Sparkline values={k.series.map((s) => s.value)} good={improving} /></div>
+                <div className="mt-1"><Sparkline values={series.map((s) => s.value)} good={improving} /></div>
                 <div className="mt-1.5 flex items-center justify-between">
                   <span className="label !text-[8.5px]">meta {fmtNum(k.target, 1)} · {k.frequency.toLowerCase()}</span>
                   <span className="num text-[9.5px] font-bold"
@@ -184,9 +211,14 @@ export default function KpiPage() {
                   <div className="label mb-2">Serie del indicador</div>
                   <table className="w-full">
                     <tbody>
-                      {kpi.series.map((s) => (
+                      {kpiSeries.map((s) => (
                         <tr key={s.period} className="border-b border-line last:border-0">
-                          <td className="num py-1.5 pr-2 text-[11px] font-semibold text-muted">{s.period}</td>
+                          <td className="num py-1.5 pr-2 text-[11px] font-semibold text-muted">
+                            {s.period}
+                            {eff[kpi.code]?.reported.includes(s.period) && (
+                              <span className="chip chip-cyan ml-1.5 !py-0 !text-[8px]">reportado</span>
+                            )}
+                          </td>
                           <td className="num py-1.5 pr-2 text-right text-[12px] font-bold text-ink">
                             {fmtNum(s.value, 2)}
                           </td>
@@ -196,6 +228,8 @@ export default function KpiPage() {
                     </tbody>
                   </table>
                 </div>
+
+                <ReportForm kpi={kpi} onReported={refetch} />
 
                 {kpiInis.length > 0 && (
                   <div className="mt-4">
@@ -219,5 +253,78 @@ export default function KpiPage() {
         </div>
       </div>
     </>
+  );
+}
+
+/* ─── registrar el valor del periodo (report_kpi, por línea) ─── */
+
+function ReportForm({ kpi, onReported }: {
+  kpi: (typeof KPIS)[number];
+  onReported: () => Promise<void>;
+}) {
+  const canReport = useCan("report_kpi", kpi.line);
+  const [period, setPeriod] = useState("");
+  const [value, setValue] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+
+  if (!canReport) {
+    return (
+      <p className="mt-4 text-[10.5px] italic text-faint">
+        El valor del periodo lo reporta el dueño del dato (responsable de la línea 4.{kpi.line}, líder o consultor).
+      </p>
+    );
+  }
+
+  const submit = async () => {
+    setSaving(true);
+    setError(null);
+    setOkMsg(null);
+    const res = await fetch("/api/td/kpi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: kpi.code, period: period.trim(), value: Number(value), note: note || undefined }),
+    });
+    if (!res.ok) {
+      setError((await res.json()).error ?? "Error al reportar");
+    } else {
+      setOkMsg(`${period.trim()} = ${value} ${kpi.unit} registrado`);
+      setPeriod(""); setValue(""); setNote("");
+      await onReported();
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="mt-4 space-y-2 rounded-lg bg-surface-2/70 p-3">
+      <div className="label !text-[8.5px]">Registrar valor del periodo</div>
+      <div className="flex gap-2">
+        <input type="text" value={period} onChange={(e) => setPeriod(e.target.value)}
+          placeholder={PERIOD_HINT[kpi.frequency]}
+          className="input w-24 !py-1.5 text-[11.5px]" />
+        <input type="number" value={value} onChange={(e) => setValue(e.target.value)}
+          placeholder={`valor (${kpi.unit})`}
+          className="input min-w-0 flex-1 !py-1.5 text-[11.5px]" />
+      </div>
+      <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
+        placeholder="Nota del periodo (opcional)"
+        className="input !py-1.5 text-[11.5px]" />
+      {error && (
+        <p className="flex items-start gap-1.5 text-[11px]" style={{ color: "var(--bad)" }}>
+          <AlertTriangle size={12} className="mt-0.5 shrink-0" /> {error}
+        </p>
+      )}
+      {okMsg && <p className="num text-[11px]" style={{ color: "var(--ok)" }}>✓ {okMsg}</p>}
+      <button onClick={submit} disabled={saving || !period.trim() || value === ""}
+        className="btn-primary w-full !py-1.5 text-[11.5px] disabled:opacity-40">
+        {saving ? <Loader2 size={12} className="animate-spin" /> : <PlusCircle size={12} />}
+        Reportar
+      </button>
+      <p className="text-[9px] text-faint">
+        Se suma a la serie y recalcula semáforo, rezago y proyección. Queda en la auditoría.
+      </p>
+    </div>
   );
 }

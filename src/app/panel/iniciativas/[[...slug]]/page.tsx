@@ -7,20 +7,23 @@
 // presupuesto en tres estados, motores de riesgo, factores con historial y
 // bitácora — con navegación anterior/siguiente (también flechas del teclado).
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader, Card, StateDot, StatusChip, StatCard } from "@/components/ui";
-import { AccessChip } from "@/components/user-context";
+import { AccessChip, useCan } from "@/components/user-context";
 import { BudgetBar } from "@/components/charts";
 import { INITIATIVES, fmtCOP, type InitiativeDemo } from "@/data/demo";
-import { CMI_OBJECTIVES, responsible, type ActionStatus } from "@/data/cmi";
+import { CMI_OBJECTIVES, responsible, type ActionStatus, type InitiativeFull } from "@/data/cmi";
 import { initiativeRisk } from "@/lib/logic";
 import { initiativeTaskStats } from "@/lib/proyectos";
 import {
   ChevronRight, CircleCheck, CircleDashed, Circle, Flag, AlertTriangle,
   StickyNote, CalendarClock, User, Target, ArrowLeft, ArrowRight,
+  Loader2, Save, PlusCircle, Pencil, X,
 } from "lucide-react";
+
+const FACTOR_COLORS = { VERDE: "var(--ok)", AMBAR: "var(--warn)", ROJO: "var(--bad)" } as const;
 
 const RISK_CLS: Record<string, string> = {
   BAJO: "chip chip-ok", MEDIO: "chip", ALTO: "chip chip-warn", "CRÍTICO": "chip chip-bad",
@@ -139,7 +142,45 @@ function IniciativaFicha({ id, onClose, onNav }: {
   onClose: () => void;
   onNav: (id: string) => void;
 }) {
-  const i: InitiativeDemo | null = INITIATIVES.find((x) => x.id === id) ?? null;
+  const base: InitiativeDemo | null = INITIATIVES.find((x) => x.id === id) ?? null;
+
+  // iniciativa efectiva: el seed + los cambios hechos desde la plataforma
+  const [effIni, setEffIni] = useState<InitiativeDemo | null>(null);
+  const refetch = useCallback(async () => {
+    try {
+      const res = await fetch("/api/td/initiatives");
+      if (!res.ok) return;
+      const j = await res.json();
+      const found = (j.initiatives as (InitiativeFull & { owner: unknown; risk: unknown })[])
+        .find((x) => x.id === id);
+      if (found) {
+        const { owner: _o, risk: _r, ...rest } = found;
+        setEffIni({ ...rest, owner: responsible(rest.ownerId).dependencia });
+      }
+    } catch { /* seed como respaldo */ }
+  }, [id]);
+  useEffect(() => { setEffIni(null); refetch(); }, [refetch]);
+
+  const i = effIni ?? base;
+  const canEdit = useCan("edit_initiatives", i?.line);
+
+  // mutación con el error explicado por el servidor
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const mutate = async (patch: Record<string, unknown>) => {
+    setSaving(true);
+    setError(null);
+    const res = await fetch("/api/td/initiatives", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...patch }),
+    });
+    if (!res.ok) setError((await res.json()).error ?? "Error al guardar");
+    else await refetch();
+    setSaving(false);
+    return res.ok;
+  };
+
   const idx = i ? INITIATIVES.findIndex((x) => x.id === i.id) : -1;
   const prev = idx > 0 ? INITIATIVES[idx - 1] : null;
   const next = idx >= 0 && idx < INITIATIVES.length - 1 ? INITIATIVES[idx + 1] : null;
@@ -198,6 +239,16 @@ function IniciativaFicha({ id, onClose, onNav }: {
         </div>
       </div>
 
+      {/* error de mutación (403/422 explicado por el servidor) */}
+      {error && (
+        <div className="rise mb-4 flex items-start gap-2.5 rounded-xl px-4 py-3"
+          style={{ background: "color-mix(in srgb, var(--bad) 8%, white)" }}>
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" style={{ color: "var(--bad)" }} />
+          <p className="flex-1 text-[12.5px] leading-relaxed text-ink-soft">{error}</p>
+          <button onClick={() => setError(null)} className="text-faint hover:text-ink"><X size={14} /></button>
+        </div>
+      )}
+
       {/* cabecera de la iniciativa */}
       <div className="rise rise-1 panel mb-5 overflow-hidden">
         <div className="spine h-[3px]" />
@@ -225,9 +276,14 @@ function IniciativaFicha({ id, onClose, onNav }: {
             </div>
           </div>
           <div className="w-full max-w-xs shrink-0 sm:w-56">
-            <div className="num mb-1 flex justify-between text-[10px] text-faint">
+            <div className="num mb-1 flex items-center justify-between text-[10px] text-faint">
               <span>{fmtCOP(i.budgetPlanned)}</span>
-              <span className="font-bold text-ink">avance {i.progress} %</span>
+              {canEdit ? (
+                <AvanceEditor value={i.progress} saving={saving}
+                  onSave={(v) => mutate({ progress: v })} />
+              ) : (
+                <span className="font-bold text-ink">avance {i.progress} %</span>
+              )}
             </div>
             <BudgetBar planned={i.budgetPlanned} committed={i.budgetCommitted} executed={i.budgetExecuted} />
             <div className="mt-2 flex items-center gap-1.5">
@@ -344,11 +400,19 @@ function IniciativaFicha({ id, onClose, onNav }: {
                     </span>
                   </div>
                   {f.note && <div className="mt-1 pl-[22px] text-[11px] leading-snug text-muted">{f.note}</div>}
+                  {canEdit && (
+                    <FactorReview name={f.name} current={f.state} saving={saving}
+                      onSave={(state, note) => mutate({ factor: { name: f.name, state, note } })} />
+                  )}
                 </div>
               ))}
             </div>
 
             <div className="label mb-3 mt-6">Bitácora de seguimiento</div>
+            {canEdit && (
+              <LogForm saving={saving}
+                onSave={(type, text) => mutate({ log: { type, text } })} />
+            )}
             {i.log.length === 0 ? (
               <p className="text-[11.5px] italic text-faint">Sin registros: la iniciativa no ha iniciado.</p>
             ) : (
@@ -372,14 +436,152 @@ function IniciativaFicha({ id, onClose, onNav }: {
 
             <div className="mt-5 flex items-start gap-2.5 rounded-xl bg-cyan-wash px-3.5 py-3">
               <CalendarClock size={14} className="mt-0.5 shrink-0 text-cyan-deep" />
-              <div>
+              <div className="min-w-0 flex-1">
                 <div className="label !text-[8.5px] !text-cyan-deep">Próximo hito · {i.nextMilestone.date}</div>
                 <div className="text-[12px] font-semibold leading-snug text-ink">{i.nextMilestone.text}</div>
               </div>
+              {canEdit && (
+                <HitoEditor current={i.nextMilestone} saving={saving}
+                  onSave={(date, text) => mutate({ nextMilestone: { date, text } })} />
+              )}
             </div>
           </div>
         </div>
       </div>
     </>
+  );
+}
+
+/* ─── controles de edición (edit_initiatives, por línea) ─── */
+
+function AvanceEditor({ value, saving, onSave }: {
+  value: number; saving: boolean; onSave: (v: number) => Promise<boolean>;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const dirty = Number(draft) !== value;
+  return (
+    <span className="flex items-center gap-1">
+      <span className="text-faint">avance</span>
+      <input type="number" min={0} max={100} value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        className="input w-14 !px-1.5 !py-0.5 text-center !text-[11px] font-bold" />
+      <span className="text-faint">%</span>
+      {dirty && (
+        <button onClick={() => onSave(Number(draft))} disabled={saving}
+          className="rounded p-0.5 text-cyan-deep hover:bg-cyan-wash" title="Guardar avance">
+          {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+        </button>
+      )}
+    </span>
+  );
+}
+
+function FactorReview({ name, current, saving, onSave }: {
+  name: string;
+  current: "VERDE" | "AMBAR" | "ROJO";
+  saving: boolean;
+  onSave: (state: "VERDE" | "AMBAR" | "ROJO", note?: string) => Promise<boolean>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [state, setState] = useState<"VERDE" | "AMBAR" | "ROJO">(current);
+  const [note, setNote] = useState("");
+  if (!open) {
+    return (
+      <button onClick={() => { setOpen(true); setState(current); setNote(""); }}
+        className="mt-1.5 flex items-center gap-1 pl-[22px] text-[10px] font-bold text-cyan-deep hover:underline">
+        <Pencil size={9} /> Registrar revisión
+      </button>
+    );
+  }
+  return (
+    <div className="mt-2 space-y-1.5 rounded-lg bg-surface px-3 py-2 shadow-sm">
+      <div className="flex items-center gap-1.5">
+        {(["VERDE", "AMBAR", "ROJO"] as const).map((s) => (
+          <button key={s} onClick={() => setState(s)}
+            className={`flex-1 rounded-lg py-1 text-[10px] font-bold transition-all ${
+              state === s ? "text-white shadow-sm" : "bg-surface-2 text-muted"}`}
+            style={state === s ? { background: FACTOR_COLORS[s] } : undefined}>
+            {s.toLowerCase()}
+          </button>
+        ))}
+      </div>
+      <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
+        placeholder="Nota de la revisión (opcional)"
+        className="input !py-1 text-[10.5px]" />
+      <div className="flex gap-1.5">
+        <button onClick={async () => { if (await onSave(state, note || undefined)) setOpen(false); }}
+          disabled={saving}
+          className="btn-primary flex-1 !py-1 text-[10.5px] disabled:opacity-40">
+          {saving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Registrar
+        </button>
+        <button onClick={() => setOpen(false)} className="btn-ghost !py-1 text-[10.5px]">Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+function LogForm({ saving, onSave }: {
+  saving: boolean;
+  onSave: (type: "HITO" | "ALERTA" | "NOTA", text: string) => Promise<boolean>;
+}) {
+  const [type, setType] = useState<"HITO" | "ALERTA" | "NOTA">("NOTA");
+  const [text, setText] = useState("");
+  return (
+    <div className="mb-3 flex gap-1.5">
+      <select value={type} onChange={(e) => setType(e.target.value as typeof type)}
+        className="input w-24 !py-1.5 text-[11px]">
+        <option value="NOTA">Nota</option>
+        <option value="HITO">Hito</option>
+        <option value="ALERTA">Alerta</option>
+      </select>
+      <input type="text" value={text} onChange={(e) => setText(e.target.value)}
+        placeholder="Registrar seguimiento…"
+        onKeyDown={async (e) => {
+          if (e.key === "Enter" && text.trim() && await onSave(type, text)) setText("");
+        }}
+        className="input min-w-0 flex-1 !py-1.5 text-[11px]" />
+      <button onClick={async () => { if (text.trim() && await onSave(type, text)) setText(""); }}
+        disabled={saving || !text.trim()}
+        className="btn-ghost !py-1.5 text-[11px] disabled:opacity-40">
+        {saving ? <Loader2 size={11} className="animate-spin" /> : <PlusCircle size={11} />}
+      </button>
+    </div>
+  );
+}
+
+function HitoEditor({ current, saving, onSave }: {
+  current: { date: string; text: string };
+  saving: boolean;
+  onSave: (date: string, text: string) => Promise<boolean>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState(current.date);
+  const [text, setText] = useState(current.text);
+  if (!open) {
+    return (
+      <button onClick={() => { setOpen(true); setDate(current.date); setText(current.text); }}
+        className="shrink-0 rounded p-1 text-cyan-deep hover:bg-white/60" title="Editar próximo hito">
+        <Pencil size={12} />
+      </button>
+    );
+  }
+  return (
+    <div className="w-full space-y-1.5 pt-1">
+      <div className="flex gap-1.5">
+        <input type="text" value={date} onChange={(e) => setDate(e.target.value)}
+          placeholder="2027-04" className="input w-24 !py-1 text-[10.5px]" />
+        <input type="text" value={text} onChange={(e) => setText(e.target.value)}
+          className="input min-w-0 flex-1 !py-1 text-[10.5px]" />
+      </div>
+      <div className="flex gap-1.5">
+        <button onClick={async () => { if (await onSave(date, text)) setOpen(false); }}
+          disabled={saving}
+          className="btn-primary !py-1 text-[10.5px] disabled:opacity-40">
+          {saving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Guardar
+        </button>
+        <button onClick={() => setOpen(false)} className="btn-ghost !py-1 text-[10.5px]">Cancelar</button>
+      </div>
+    </div>
   );
 }
