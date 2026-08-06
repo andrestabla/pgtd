@@ -33,7 +33,7 @@ export default function RutaPage() {
                 horizon: i.horizon, progress: i.progress,
               }))} />
           </div>
-          <div className="flex items-center gap-5 border-t border-line px-5 py-3 text-[11.5px] text-muted">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-line px-5 py-3 text-[11.5px] text-muted">
             <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded" style={{ background: "var(--cyan)" }} /> Corto plazo (0–12 m)</span>
             <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded" style={{ background: "var(--gold-fill)" }} /> Mediano plazo (12–36 m)</span>
           </div>

@@ -123,7 +123,7 @@ export default function Panel() {
             const meta = SEV_META[al.severity];
             return (
               <Link key={al.id} href={al.href}
-                className="group flex items-start gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-surface-2">
+                className="group flex min-w-0 items-start gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-surface-2">
                 <meta.icon size={15} className="mt-0.5 shrink-0" style={{ color: meta.color }} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] font-bold text-ink">{al.title}</div>

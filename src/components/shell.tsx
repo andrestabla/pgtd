@@ -196,8 +196,8 @@ export function AppShell({ children, user }: {
         <header className="sticky top-0 z-30 flex h-[54px] items-center gap-3 border-b border-line/70 bg-white/70 px-4 backdrop-blur-xl sm:px-7">
           <button onClick={() => setOpen(true)} className="text-muted lg:hidden"><Menu size={19} /></button>
 
-          <div className="flex items-baseline gap-2.5">
-            <span className="text-[13.5px] font-bold tracking-tight text-ink">
+          <div className="flex min-w-0 items-baseline gap-2.5">
+            <span className="truncate text-[13.5px] font-bold tracking-tight text-ink">
               {current?.label ?? "Panel"}
             </span>
             {current?.code && (
@@ -205,7 +205,7 @@ export function AppShell({ children, user }: {
             )}
           </div>
 
-          <span className="chip chip-gold ml-1 hidden sm:inline-flex" title="Datos ilustrativos. La primera medición real se produce en la Fase 0.">
+          <span className="chip chip-gold ml-1 hidden md:inline-flex" title="Datos ilustrativos. La primera medición real se produce en la Fase 0.">
             <FlaskConical size={11} /> Datos demo
           </span>
 

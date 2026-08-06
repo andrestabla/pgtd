@@ -112,6 +112,9 @@ body {
   background: var(--surface);
   border-radius: var(--r-md);
   box-shadow: var(--e1);
+  /* como hijo de grid/flex puede encoger: el contenido ancho se resuelve
+     con overflow interno, no empujando el ancho de la página */
+  min-width: 0;
 }
 .panel-lift {
   transition: transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.22s ease;

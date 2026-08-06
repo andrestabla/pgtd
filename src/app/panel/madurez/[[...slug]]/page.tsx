@@ -128,10 +128,13 @@ export default function MadurezPage() {
 
   return (
     <>
+      {!openVarId && (
       <PageHeader kicker="M1 · Diagnóstico de madurez" title="Madurez por línea y dimensión"
         desc={`${VARIABLES.length} variables medidas contra 8 referentes (eMM, Decreto 1330, CNA, TOGAF, DAMA, INTEF, ISO 27001, CMI), con hallazgo, recomendación y evidencia por variable.`}  actions={<AccessChip module="madurez" />} />
+      )}
 
       {/* selector de vista */}
+      {!openVarId && (
       <div className="rise mb-6 flex flex-wrap gap-1.5 rounded-2xl bg-surface-2 p-1.5">
         {TABS.map((t) => (
           <button key={t.id}
@@ -149,6 +152,7 @@ export default function MadurezPage() {
           <HelpCircle size={14} /> Convenciones
         </Link>
       </div>
+      )}
 
       {/* ═══════════ RESUMEN ═══════════ */}
       {tab === "resumen" && (
@@ -285,7 +289,7 @@ export default function MadurezPage() {
       )}
 
       {/* ═══════════ VARIABLES ═══════════ */}
-      {tab === "variables" && (
+      {tab === "variables" && !openVarId && (
         <>
           <div className="rise mb-4 flex flex-wrap items-center gap-2">
             {cellFilter && (
@@ -338,9 +342,9 @@ export default function MadurezPage() {
         </>
       )}
 
-      {/* ficha lateral de variable — /panel/madurez/variables/<ID> */}
+      {/* ficha de variable a pantalla completa — /panel/madurez/variables/<ID> */}
       {openVarId && (
-        <VariableSheet id={openVarId} list={filteredVars}
+        <VariablePage id={openVarId} list={filteredVars}
           onClose={closeVariable} onNav={openVariable} />
       )}
 
@@ -876,9 +880,9 @@ function VariableRow({ v, idx, active, onOpen }: {
   );
 }
 
-/* ─── ficha lateral de variable ─── */
+/* ─── ficha de variable a pantalla completa ─── */
 
-function VariableSheet({ id, list, onClose, onNav }: {
+function VariablePage({ id, list, onClose, onNav }: {
   id: string;
   list: Variable[];                 // lista filtrada vigente (para anterior/siguiente)
   onClose: () => void;
@@ -893,7 +897,7 @@ function VariableSheet({ id, list, onClose, onNav }: {
   const prev = idx > 0 ? navList[idx - 1] : null;
   const next = idx >= 0 && idx < navList.length - 1 ? navList[idx + 1] : null;
 
-  // Escape cierra · flechas navegan · scroll del fondo bloqueado
+  // Escape vuelve al listado · flechas navegan entre variables
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -901,24 +905,22 @@ function VariableSheet({ id, list, onClose, onNav }: {
       if (e.key === "ArrowRight" && next) onNav(next.id);
     };
     window.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [onClose, onNav, prev, next]);
+
+  // al cambiar de variable, arrancar desde arriba
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [id]);
 
   if (!v) {
     return (
-      <div className="fixed inset-0 z-50">
-        <div className="absolute inset-0 bg-navy-deep/40 backdrop-blur-[2px]" onClick={onClose} />
-        <div className="absolute inset-y-0 right-0 w-full max-w-md bg-surface p-8 shadow-2xl">
-          <p className="text-[13px] text-muted">
-            La variable <b className="num">{id}</b> no existe en el instrumento.
-          </p>
-          <button onClick={onClose} className="btn-ghost mt-4">Volver a variables</button>
-        </div>
-      </div>
+      <>
+        <button onClick={onClose} className="btn-ghost rise mb-5">
+          <ArrowLeft size={13} /> Variables del instrumento
+        </button>
+        <p className="rounded-xl bg-surface-2 px-5 py-6 text-[13px] text-muted">
+          La variable <b className="num">{id}</b> no existe en el instrumento.
+        </p>
+      </>
     );
   }
 
@@ -929,48 +931,55 @@ function VariableSheet({ id, list, onClose, onNav }: {
   const owner = responsible(v.ownerId);
 
   return (
-    <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-navy-deep/40 backdrop-blur-[2px]" onClick={onClose} />
-      <aside className="absolute inset-y-0 right-0 flex w-full max-w-[860px] flex-col bg-bg shadow-2xl"
-        role="dialog" aria-label={`Variable ${v.id}`}>
-
-        {/* cabecera */}
-        <div className="flex items-center gap-3 border-b border-line bg-surface px-6 py-3.5">
-          <div className="min-w-0 flex-1">
-            <div className="num text-[10px] font-bold text-cyan-deep">
-              {v.id} <span className="text-faint">· {line.code} {line.short} · {dim.name}</span>
-            </div>
-            <h2 className="truncate text-[16px] font-extrabold tracking-tight text-ink">{v.name}</h2>
-          </div>
-          <span className="chip !py-0 !text-[8.5px]" style={{ color: FRAME_COLORS[v.frame] }}>{v.frame}</span>
-          <span className="num shrink-0 rounded-lg px-2 py-1 text-[13px] font-extrabold text-white"
-            style={{ background: LEVEL_BG[v.value] }}>{v.value}</span>
-          <span className={`chip shrink-0 ${gap >= 3 ? "chip-bad" : gap === 2 ? "chip-warn" : gap <= 0 ? "chip-ok" : ""}`}>
-            {gap <= 0 ? "En meta" : `Brecha ${gap}`}
-          </span>
-          <span className="mx-1 h-5 w-px bg-line-strong" />
+    <>
+      {/* barra de contexto: volver + anterior/siguiente */}
+      <div className="rise mb-5 flex flex-wrap items-center gap-2">
+        <button onClick={onClose} className="btn-ghost" title="Volver al listado (Esc)">
+          <ArrowLeft size={13} /> Variables del instrumento
+        </button>
+        <span className="num text-[11px] text-faint">{idx + 1} de {navList.length}</span>
+        <div className="ml-auto flex items-center gap-1.5">
           <button onClick={() => prev && onNav(prev.id)} disabled={!prev}
             title={prev ? `${prev.id} · ${prev.name}` : undefined}
-            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-30">
-            <ArrowLeft size={16} />
+            className="btn-ghost disabled:opacity-30">
+            <ArrowLeft size={13} /> <span className="num hidden sm:inline">{prev?.id ?? "—"}</span>
           </button>
-          <span className="num text-[10px] text-faint">{idx + 1}/{navList.length}</span>
           <button onClick={() => next && onNav(next.id)} disabled={!next}
             title={next ? `${next.id} · ${next.name}` : undefined}
-            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-30">
-            <ArrowRight size={16} />
-          </button>
-          <button onClick={onClose} title="Cerrar (Esc)"
-            className="ml-1 rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink">
-            <X size={17} />
+            className="btn-ghost disabled:opacity-30">
+            <span className="num hidden sm:inline">{next?.id ?? "—"}</span> <ArrowRight size={13} />
           </button>
         </div>
+      </div>
 
-        {/* cuerpo */}
-        <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* cabecera de la variable */}
+      <div className="rise rise-1 panel mb-5 overflow-hidden">
+        <div className="spine h-[3px]" />
+        <div className="flex flex-wrap items-start gap-x-4 gap-y-3 px-6 py-5">
+          <div className="min-w-0 flex-1 basis-72">
+            <div className="num text-[10.5px] font-bold text-cyan-deep">
+              {v.id} <span className="font-medium text-faint">· {line.code} {line.short} · {dim.name}</span>
+            </div>
+            <h1 className="mt-0.5 text-[22px] font-extrabold leading-tight tracking-[-0.02em] text-ink">
+              {v.name}
+            </h1>
+            <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-muted">{v.desc}</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <span className="chip" style={{ color: FRAME_COLORS[v.frame] }}>{v.frame}</span>
+            <span className="num rounded-lg px-2.5 py-1 text-[15px] font-extrabold text-white"
+              style={{ background: LEVEL_BG[v.value] }}>{v.value}</span>
+            <span className={`chip ${gap >= 3 ? "chip-bad" : gap === 2 ? "chip-warn" : gap <= 0 ? "chip-ok" : ""}`}>
+              {gap <= 0 ? "En meta" : `Brecha ${gap}`}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* cuerpo */}
+      <div className="rise rise-2 panel mb-5">
         <div className="grid gap-5 px-6 py-5 lg:grid-cols-2">
           <div>
-            <p className="mb-3 text-[12.5px] leading-relaxed text-muted">{v.desc}</p>
             <div className="mb-3 flex items-center gap-3">
               <LevelBadge level={v.value} />
               <span className="text-[11px] text-faint">meta</span>
@@ -1063,12 +1072,13 @@ function VariableSheet({ id, list, onClose, onNav }: {
             </div>
           </div>
         </div>
-        <div className="mx-6 mb-6 overflow-hidden rounded-xl bg-surface shadow-sm">
-          <ProtocolBlock v={v} />
-        </div>
-        </div>
-      </aside>
-    </div>
+      </div>
+
+      {/* protocolo de indagación */}
+      <Card className="rise rise-3 overflow-hidden">
+        <ProtocolBlock v={v} />
+      </Card>
+    </>
   );
 }
 

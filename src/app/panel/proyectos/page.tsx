@@ -135,7 +135,7 @@ export default function ProyectosPage() {
       <PageHeader kicker="GP · Gestor de proyectos" title="Plan de trabajo del portafolio"
         desc={`${data.stats.total} tareas en ${INITIATIVES.length} iniciativas · las mutaciones pasan por la matriz de permisos del servidor. Hoy (demo): ${fmtDate(DEMO_TODAY)}.`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <AccessChip module="proyectos" />
             <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
               {([["tablero", KanbanSquare, "Tablero"], ["cronograma", CalendarRange, "Cronograma"], ["personas", Users, "Personas"]] as const).map(([v, Icon, label]) => (
@@ -195,12 +195,12 @@ export default function ProyectosPage() {
         <div className="rise rise-2 mb-5 flex flex-wrap gap-2">
           {data.alerts.slice(0, 4).map((a) => (
             <button key={a.id} onClick={() => setOpenTask(a.taskId)}
-              className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-[11.5px] transition-transform hover:-translate-y-0.5"
+              className="flex max-w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[11.5px] transition-transform hover:-translate-y-0.5"
               style={{ background: a.severity === 1 ? "color-mix(in srgb, var(--bad) 9%, white)" : "color-mix(in srgb, var(--warn) 10%, white)" }}>
               {a.kind === "TAREA_BLOQUEADA"
-                ? <Lock size={12} style={{ color: "var(--bad)" }} />
-                : <AlertTriangle size={12} style={{ color: a.severity === 1 ? "var(--bad)" : "var(--warn)" }} />}
-              <span className="max-w-[300px] truncate font-semibold text-ink">{a.title}</span>
+                ? <Lock size={12} className="shrink-0" style={{ color: "var(--bad)" }} />
+                : <AlertTriangle size={12} className="shrink-0" style={{ color: a.severity === 1 ? "var(--bad)" : "var(--warn)" }} />}
+              <span className="min-w-0 max-w-[300px] truncate font-semibold text-ink">{a.title}</span>
               <span className="num text-[10px] text-muted">{a.ownerName.split(" ")[0]}</span>
             </button>
           ))}
@@ -236,7 +236,7 @@ export default function ProyectosPage() {
         ))}
       </div>
 
-      <div className="grid gap-5" style={{ gridTemplateColumns: task ? "1fr 350px" : "1fr" }}>
+      <div className={`grid gap-5 ${task ? "lg:grid-cols-[1fr_350px]" : ""}`}>
         <div className="min-w-0">
           {/* ═══ TABLERO ═══ */}
           {view === "tablero" && (
@@ -503,7 +503,7 @@ function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus
   const assignee = personOf(task.assigneeId);
 
   return (
-    <div className="lg:sticky lg:top-[70px] lg:self-start">
+    <div className="order-first min-w-0 lg:order-none lg:sticky lg:top-[70px] lg:self-start">
       <Card className="ring-1 ring-cyan/40">
         <CardHeader title={task.id}
           sub={editable ? "Ficha editable — tu rol puede modificarla" : `Solo lectura para tu rol (${userRole})`}

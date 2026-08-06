@@ -54,7 +54,7 @@ export function PageHeader({ kicker, title, desc, actions }:
         </h1>
         {desc && <p className="mt-2 text-[13.5px] leading-relaxed text-muted">{desc}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }
