@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 
 import {
   setIntegration, getIntegrationsMasked, setBranding, getBranding,
-  createUser, updateUser, resetStore,
+  getBrandingHistory, createUser, updateUser, resetStore,
 } from "../src/server/store";
 import type { SessionUser } from "../src/lib/session";
 
@@ -56,13 +56,29 @@ test("branding: validaciones y aplicación", () => {
   assert.ok(!(setBranding(admin, { accent: "azul" }) as { ok: boolean }).ok);
   assert.ok(!(setBranding(admin, { shortName: "u" }) as { ok: boolean }).ok);
 
-  const ok = setBranding(admin, { shortName: "upc", accent: "#7c5cd6", tagline: "Territorio digital" });
+  // validaciones del modelo ampliado
+  assert.ok(!(setBranding(admin, { loginLayout: "diagonal" as never }) as { ok: boolean }).ok, "layout inválido");
+  assert.ok(!(setBranding(admin, { overlayOpacity: 140 }) as { ok: boolean }).ok, "opacidad fuera de rango");
+  assert.ok(!(setBranding(admin, { font: "Comic Sans" }) as { ok: boolean }).ok, "fuente no curada");
+  assert.ok(!(setBranding(admin, { radius: "mucho" }) as { ok: boolean }).ok, "radio inválido");
+  assert.ok(!(setBranding(admin, { logoLight: "no-es-url" }) as { ok: boolean }).ok, "logo inválido");
+
+  const ok = setBranding(admin, {
+    shortName: "upc", accent: "#7c5cd6", tagline: "Territorio digital",
+    loginLayout: "centered", overlayOpacity: 55, font: "Manrope", radius: "0.8rem",
+    heroMessages: ["Mensaje uno", "  ", "Mensaje dos"],
+    panelImages: ["https://example.com/a.jpg", "/back.jpg"],
+  });
   assert.ok(ok.ok);
   const b = getBranding();
   assert.equal(b.shortName, "UPC");
   assert.equal(b.accent, "#7c5cd6");
+  assert.equal(b.loginLayout, "centered");
+  assert.equal(b.heroMessages.length, 2, "los mensajes vacíos se descartan");
+  assert.ok(getBrandingHistory().length >= 1, "el guardado queda en el historial");
   resetStore();
-  assert.equal(getBranding().accent, null);
+  assert.equal(getBranding().accent, "#0e93b4");
+  assert.equal(getBranding().loginLayout, "image-left");
 });
 
 test("usuarios: el flujo de administración sigue íntegro tras el módulo", () => {

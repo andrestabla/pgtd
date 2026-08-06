@@ -29,7 +29,7 @@ export type AuditEntry = {
   at: string;               // ISO
   actor: string;            // nombre del usuario
   role: string;
-  entity: "task" | "evidence";
+  entity: "task" | "evidence" | "branding";
   entityId: string;
   change: string;           // descripción legible
 };
@@ -232,7 +232,7 @@ export type MutationResult =
   | { ok: true; task: Task }
   | { ok: false; status: number; error: string };
 
-function audit(actor: SessionUser, entity: "task" | "evidence", entityId: string, change: string) {
+function audit(actor: SessionUser, entity: "task" | "evidence" | "branding", entityId: string, change: string) {
   auditLog().unshift({
     id: auditLog().length + 1,
     at: new Date().toISOString(),
@@ -1236,29 +1236,95 @@ export function setIntegration(
   return { ok: true };
 }
 
-/* ═══ Branding de la plataforma ═══ */
+/* ═══ Branding de la plataforma ═══
+   Configuración completa de marca: identidad (nombres, logos, favicon,
+   zona horaria), tema visual (paleta con derivados, tipografía, radio,
+   ancho, botones), login (layout, textos con visibilidad, overlay,
+   imágenes en rotación, loader) y CSS avanzado. Cada guardado queda en
+   el historial auditado. */
 
 export type Branding = {
+  // identidad
+  platformName: string; showPlatformName: boolean;
   institutionName: string;
   shortName: string;
   tagline: string;
-  accent: string | null;         // color hex del acento; null = tema Algoritmo T
+  logoLight: string | null;      // sobre fondos claros (URL o /api/branding-asset/…)
+  logoDark: string | null;       // sobre fondos oscuros (si falta, se reusa el principal)
+  favicon: string | null;
+  timezone: string;
+  // tema visual
+  primary: string;               // hex — superficies de marca (rail, botones)
+  secondary: string;             // hex — profundo (gradientes, overlays)
+  accent: string;                // hex — el matiz que tiñe kickers, chips y gráficos
+  font: string;                  // Google Font curada (Inter por defecto)
+  radius: string;                // p. ej. "14px" · "0.8rem"
+  maxWidth: string;              // ancho máximo del contenido
+  buttonStyle: "solid" | "outline";
+  // login
+  loginLayout: "image-left" | "image-right" | "centered";
+  loginTitle: string; showLoginTitle: boolean;
+  loginWelcome: string; showLoginWelcome: boolean;
+  loginSupport: string; showLoginSupport: boolean;
+  heroTitle: string; showHeroTitle: boolean;
+  heroMessages: string[];        // rotan aleatoriamente en cada carga
+  showHeroMessages: boolean;
+  heroSupport: string; showHeroSupport: boolean;
+  overlayColor: string;          // hex del velo sobre la imagen
+  overlayOpacity: number;        // 0–100
+  backgroundImages: string[];    // fondos del layout centrado (rotación aleatoria)
+  panelImages: string[];         // imágenes del panel lateral (rotación aleatoria)
+  loader: string | null;         // imagen/GIF de carga
+  loaderText: string; showLoaderText: boolean;
+  customCss: string;
 };
 
-const DEFAULT_BRANDING: Branding = {
+export const DEFAULT_BRANDING: Branding = {
+  platformName: "PGTD", showPlatformName: true,
   institutionName: "Universidad Popular del Cesar",
   shortName: "UPC",
   tagline: "Soluciones digitales con sentido humano",
-  accent: null,
+  logoLight: null, logoDark: null, favicon: null,
+  timezone: "America/Bogota",
+  primary: "#1a2d5a", secondary: "#0d1830", accent: "#0e93b4",
+  font: "Inter", radius: "14px", maxWidth: "1220px", buttonStyle: "solid",
+  loginLayout: "image-left",
+  loginTitle: "Iniciar sesión", showLoginTitle: true,
+  loginWelcome: "Entra con tu cuenta institucional asignada por el administrador.", showLoginWelcome: true,
+  loginSupport: "Soporte: soporte@algoritmot.com", showLoginSupport: false,
+  heroTitle: "Plataforma de Gestión de la Transformación Digital con Enfoque Territorial", showHeroTitle: true,
+  heroMessages: [], showHeroMessages: true,
+  heroSupport: "", showHeroSupport: false,
+  overlayColor: "#0d1830", overlayOpacity: 72,
+  backgroundImages: [], panelImages: ["/back.jpg"],
+  loader: null, loaderText: "Cargando experiencia", showLoaderText: true,
+  customCss: "",
 };
+
+export const BRANDING_FONTS = ["Inter", "Manrope", "Outfit", "Poppins", "Roboto", "Nunito Sans", "Work Sans"] as const;
+export const BRANDING_TIMEZONES = [
+  "America/Bogota", "America/Mexico_City", "America/Lima", "America/Santiago",
+  "America/Argentina/Buenos_Aires", "America/Panama", "UTC",
+] as const;
+const MAX_WIDTHS = ["1100px", "1220px", "1260px", "1440px", "1600px", "100%"];
 
 const branding = () => {
   const gb = g as unknown as { __pgtdBranding?: Branding };
-  if (!gb.__pgtdBranding) gb.__pgtdBranding = { ...DEFAULT_BRANDING };
+  if (!gb.__pgtdBranding) gb.__pgtdBranding = structuredClone(DEFAULT_BRANDING);
+  // migración defensiva: si el objeto en memoria viene de una versión
+  // anterior del modelo, se completan las claves faltantes con el default
+  for (const [k, v] of Object.entries(DEFAULT_BRANDING)) {
+    if ((gb.__pgtdBranding as Record<string, unknown>)[k] === undefined) {
+      (gb.__pgtdBranding as Record<string, unknown>)[k] = structuredClone(v);
+    }
+  }
   return gb.__pgtdBranding;
 };
 
 export const getBranding = (): Branding => ({ ...branding() });
+
+const HEX = /^#[0-9a-f]{6}$/i;
+const isUrlish = (v: string) => /^https?:\/\/\S+$/.test(v) || v.startsWith("/");
 
 export function setBranding(
   user: SessionUser,
@@ -1268,28 +1334,115 @@ export function setBranding(
     return { ok: false, status: 403, error: "Solo el administrador de la plataforma edita el branding." };
   }
   const b = branding();
+  const changes: string[] = [];
+  const err = (m: string) => ({ ok: false as const, status: 422, error: m });
+
+  // ── identidad ──
+  if (patch.platformName !== undefined) {
+    if (patch.platformName.trim().length < 2) return err("El nombre de la plataforma es demasiado corto.");
+    b.platformName = patch.platformName.trim(); changes.push("nombre de plataforma");
+  }
   if (patch.institutionName !== undefined) {
-    if (patch.institutionName.trim().length < 5) {
-      return { ok: false, status: 422, error: "El nombre institucional es demasiado corto." };
-    }
-    b.institutionName = patch.institutionName.trim();
+    if (patch.institutionName.trim().length < 5) return err("El nombre institucional es demasiado corto.");
+    b.institutionName = patch.institutionName.trim(); changes.push("nombre institucional");
   }
   if (patch.shortName !== undefined) {
     if (!/^[A-ZÁÉÍÓÚÑ0-9]{2,10}$/i.test(patch.shortName.trim())) {
-      return { ok: false, status: 422, error: "La sigla debe tener 2–10 caracteres alfanuméricos." };
+      return err("La sigla debe tener 2–10 caracteres alfanuméricos.");
     }
-    b.shortName = patch.shortName.trim().toUpperCase();
+    b.shortName = patch.shortName.trim().toUpperCase(); changes.push("sigla");
   }
-  if (patch.tagline !== undefined) b.tagline = patch.tagline.trim();
-  if (patch.accent !== undefined) {
-    if (patch.accent !== null && !/^#[0-9a-f]{6}$/i.test(patch.accent)) {
-      return { ok: false, status: 422, error: "El acento debe ser un color hex (#rrggbb) o vacío para el tema por defecto." };
+  if (patch.tagline !== undefined) { b.tagline = patch.tagline.trim(); changes.push("tagline"); }
+  for (const key of ["logoLight", "logoDark", "favicon", "loader"] as const) {
+    const v = patch[key];
+    if (v !== undefined) {
+      if (v !== null && !isUrlish(v)) return err(`${key}: debe ser una URL (https://…) o una ruta local.`);
+      b[key] = v; changes.push(key);
     }
-    b.accent = patch.accent;
   }
-  audit(user, "task", "branding", "branding de la plataforma actualizado");
+  if (patch.timezone !== undefined) {
+    if (!patch.timezone.trim() || !/^[A-Za-z_]+(\/[A-Za-z_]+){0,2}$/.test(patch.timezone.trim())) {
+      return err("Zona horaria inválida (formato Área/Ciudad).");
+    }
+    b.timezone = patch.timezone.trim(); changes.push("zona horaria");
+  }
+
+  // ── tema visual ──
+  for (const key of ["primary", "secondary", "accent", "overlayColor"] as const) {
+    const v = patch[key];
+    if (v !== undefined) {
+      if (!HEX.test(v)) return err(`${key}: debe ser un color hex (#rrggbb).`);
+      b[key] = v.toLowerCase(); changes.push(key);
+    }
+  }
+  if (patch.font !== undefined) {
+    if (!(BRANDING_FONTS as readonly string[]).includes(patch.font)) {
+      return err(`Fuente no soportada. Opciones: ${BRANDING_FONTS.join(", ")}.`);
+    }
+    b.font = patch.font; changes.push("tipografía");
+  }
+  if (patch.radius !== undefined) {
+    if (!/^\d+(\.\d+)?(px|rem)$/.test(patch.radius.trim())) return err("El radio debe ser un valor en px o rem (p. ej. 0.8rem).");
+    b.radius = patch.radius.trim(); changes.push("radio de borde");
+  }
+  if (patch.maxWidth !== undefined) {
+    if (!MAX_WIDTHS.includes(patch.maxWidth)) return err(`Ancho máximo inválido. Opciones: ${MAX_WIDTHS.join(", ")}.`);
+    b.maxWidth = patch.maxWidth; changes.push("ancho máximo");
+  }
+  if (patch.buttonStyle !== undefined) {
+    if (!["solid", "outline"].includes(patch.buttonStyle)) return err("Estilo de botón inválido (solid/outline).");
+    b.buttonStyle = patch.buttonStyle; changes.push("estilo de botón");
+  }
+
+  // ── login ──
+  if (patch.loginLayout !== undefined) {
+    if (!["image-left", "image-right", "centered"].includes(patch.loginLayout)) {
+      return err("Layout de login inválido (image-left/image-right/centered).");
+    }
+    b.loginLayout = patch.loginLayout; changes.push("layout del login");
+  }
+  for (const key of ["loginTitle", "loginWelcome", "loginSupport", "heroTitle", "heroSupport", "loaderText"] as const) {
+    if (patch[key] !== undefined) { b[key] = patch[key]!.trim(); changes.push(key); }
+  }
+  for (const key of ["showPlatformName", "showLoginTitle", "showLoginWelcome", "showLoginSupport",
+    "showHeroTitle", "showHeroMessages", "showHeroSupport", "showLoaderText"] as const) {
+    if (patch[key] !== undefined) { b[key] = Boolean(patch[key]); changes.push(key); }
+  }
+  if (patch.overlayOpacity !== undefined) {
+    if (!Number.isFinite(patch.overlayOpacity) || patch.overlayOpacity < 0 || patch.overlayOpacity > 100) {
+      return err("La opacidad del velo es un número 0–100.");
+    }
+    b.overlayOpacity = Math.round(patch.overlayOpacity); changes.push("opacidad del velo");
+  }
+  if (patch.heroMessages !== undefined) {
+    if (!Array.isArray(patch.heroMessages) || patch.heroMessages.some((m) => typeof m !== "string")) {
+      return err("Los mensajes sobre imagen deben ser una lista de textos.");
+    }
+    b.heroMessages = patch.heroMessages.map((m) => m.trim()).filter(Boolean).slice(0, 8);
+    changes.push("mensajes sobre imagen");
+  }
+  for (const key of ["backgroundImages", "panelImages"] as const) {
+    const v = patch[key];
+    if (v !== undefined) {
+      if (!Array.isArray(v) || v.some((u) => typeof u !== "string" || !isUrlish(u))) {
+        return err(`${key}: deben ser URLs (https://…) o rutas locales.`);
+      }
+      b[key] = v.slice(0, 10); changes.push(key);
+    }
+  }
+  if (patch.customCss !== undefined) {
+    if (patch.customCss.length > 20_000) return err("El CSS personalizado supera los 20.000 caracteres.");
+    b.customCss = patch.customCss; changes.push("CSS personalizado");
+  }
+
+  if (changes.length === 0) return err("Nada que actualizar.");
+  audit(user, "branding", "branding", `branding: ${changes.join(" · ")}`);
   return { ok: true, branding: { ...b } };
 }
+
+/** Historial de cambios de branding (auditoría filtrada). */
+export const getBrandingHistory = () =>
+  auditLog().filter((a) => a.entity === "branding");
 
 /* ═══ Notificaciones: estado de lectura por usuario ═══ */
 

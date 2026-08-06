@@ -3,7 +3,7 @@ import { getSession } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import {
   getIntegrationsMasked, setIntegration, getBranding, setBranding,
-  type IntegrationKey,
+  getBrandingHistory, type IntegrationKey,
 } from "@/server/store";
 
 // GET /api/td/settings — configuración de administración.
@@ -12,9 +12,11 @@ import {
 export async function GET() {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  const admin = can(user, "manage_platform");
   return NextResponse.json({
     branding: getBranding(),
-    integrations: can(user, "manage_users") ? getIntegrationsMasked() : null,
+    integrations: admin ? getIntegrationsMasked() : null,
+    brandingHistory: admin ? getBrandingHistory().slice(0, 30) : null,
   });
 }
 

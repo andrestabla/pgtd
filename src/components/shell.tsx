@@ -16,7 +16,7 @@ import {
 import { AlgoritmoMark } from "@/components/logo";
 import { CommandPalette, SearchButton } from "@/components/command-palette";
 import { INSTITUTION } from "@/data/demo";
-import { applyAccent } from "@/lib/branding";
+import { applyTheme } from "@/lib/branding";
 
 function PublicLinkButton() {
   const [state, setState] = useState<"idle" | "busy" | "copied">("idle");
@@ -195,12 +195,12 @@ export function AppShell({ children, user }: {
   const [collapsed, setCollapsed] = useState(false);
 
   // branding: nombres y acento definidos en /panel/admin/branding
-  const [brand, setBrand] = useState<{ institutionName: string; shortName: string; accent: string | null } | null>(null);
+  const [brand, setBrand] = useState<{ institutionName: string; shortName: string; platformName?: string; logoDark?: string | null; logoLight?: string | null } | null>(null);
   useEffect(() => {
-    fetch("/api/td/settings").then((r) => (r.ok ? r.json() : null)).then((j) => {
+    fetch("/api/branding").then((r) => (r.ok ? r.json() : null)).then((j) => {
       if (j?.branding) {
         setBrand(j.branding);
-        applyAccent(j.branding.accent);
+        applyTheme(j.branding);
       }
     }).catch(() => null);
   }, []);
@@ -272,10 +272,15 @@ export function AppShell({ children, user }: {
         <div aria-hidden className="pointer-events-none absolute inset-0"
           style={{ background: "radial-gradient(420px 220px at 100% 0%, rgb(79 208 236 / 0.09), transparent 60%)" }} />
         <div className={`relative flex items-center pb-6 pt-5 ${collapsed ? "justify-center px-0" : "gap-2.5 px-5"}`}>
-          <AlgoritmoMark size={27} />
-          {!collapsed && (
+          {brand?.logoDark || brand?.logoLight ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={(brand.logoDark ?? brand.logoLight)!} alt="" className="h-7 max-w-[140px] object-contain" />
+          ) : (
+            <AlgoritmoMark size={27} />
+          )}
+          {!collapsed && !(brand?.logoDark || brand?.logoLight) && (
             <div className="leading-tight">
-              <div className="text-[13.5px] font-extrabold tracking-tight text-white">PGTD</div>
+              <div className="text-[13.5px] font-extrabold tracking-tight text-white">{brand?.platformName ?? "PGTD"}</div>
               <div className="text-[8.5px] font-semibold uppercase tracking-[0.16em] text-white/35">
                 Algoritmo T
               </div>

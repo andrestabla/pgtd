@@ -12,10 +12,10 @@ import { PageHeader, Card, CardHeader } from "@/components/ui";
 import { AccessChip, useCan, useUser } from "@/components/user-context";
 import { LINES } from "@/data/demo";
 import { PERMISSION_MATRIX, MODULE_ACTIONS, type Action, type ModuleKey } from "@/lib/permissions";
-import { applyAccent } from "@/lib/branding";
+import { BrandingTab } from "./branding-tab";
 import {
   UserPlus, Loader2, AlertTriangle, X, ShieldCheck, Power, PowerOff,
-  Users2, KeyRound, Plug, Palette, Check, Minus, Save, Paintbrush,
+  Users2, KeyRound, Plug, Palette, Check, Minus, Save,
 } from "lucide-react";
 
 /* ═══ pestañas con ruta propia ═══ */
@@ -427,139 +427,6 @@ function IntegrationCard({ it, rise, onSaved, onError }: {
         )}
       </div>
     </Card>
-  );
-}
-
-/* ═══ Branding ═══ */
-
-type Branding = {
-  institutionName: string; shortName: string; tagline: string; accent: string | null;
-};
-
-function BrandingTab() {
-  const [saved, setSaved] = useState<Branding | null>(null);
-  const [draft, setDraft] = useState<Branding | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/td/settings").then((r) => r.ok ? r.json() : null).then((j) => {
-      if (j?.branding) { setSaved(j.branding); setDraft(j.branding); }
-    });
-  }, []);
-
-  if (!draft || !saved) {
-    return <p className="flex items-center gap-2 text-[13px] text-muted"><Loader2 size={15} className="animate-spin" /> Cargando branding…</p>;
-  }
-
-  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
-
-  const save = async () => {
-    setSaving(true); setError(null); setOkMsg(false);
-    const res = await fetch("/api/td/settings", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branding: draft }),
-    });
-    if (!res.ok) {
-      setError((await res.json().catch(() => null))?.error ?? `Error ${res.status}`);
-    } else {
-      const j = await res.json();
-      setSaved(j.branding);
-      setDraft(j.branding);
-      applyAccent(j.branding.accent);      // el tema cambia en vivo
-      setOkMsg(true);
-    }
-    setSaving(false);
-  };
-
-  return (
-    <>
-      {error && <ErrorBanner error={error} onClose={() => setError(null)} />}
-      <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
-        <Card className="rise rise-1">
-          <CardHeader title="Identidad de la plataforma"
-            sub="nombres, tagline y color de acento — el acento re-tiñe el tema completo al guardar" />
-          <div className="space-y-3 px-5 pb-5">
-            <label className="block">
-              <span className="label !text-[8.5px]">Nombre institucional</span>
-              <input type="text" value={draft.institutionName}
-                onChange={(e) => setDraft({ ...draft, institutionName: e.target.value })}
-                className="input mt-1 !py-2 text-[12.5px]" />
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="label !text-[8.5px]">Sigla</span>
-                <input type="text" value={draft.shortName}
-                  onChange={(e) => setDraft({ ...draft, shortName: e.target.value })}
-                  className="input mt-1 !py-2 text-[12.5px]" />
-              </label>
-              <label className="block">
-                <span className="label !text-[8.5px]">Color de acento</span>
-                <span className="mt-1 flex items-center gap-2">
-                  <input type="color" value={draft.accent ?? "#0e93b4"}
-                    onChange={(e) => setDraft({ ...draft, accent: e.target.value })}
-                    className="h-9 w-12 cursor-pointer rounded-lg border-0 bg-surface-2 p-1" />
-                  <span className="num flex-1 text-[11.5px] text-muted">{draft.accent ?? "tema Algoritmo T"}</span>
-                  {draft.accent && (
-                    <button onClick={() => setDraft({ ...draft, accent: null })}
-                      className="chip cursor-pointer">Restablecer</button>
-                  )}
-                </span>
-              </label>
-            </div>
-            <label className="block">
-              <span className="label !text-[8.5px]">Tagline</span>
-              <input type="text" value={draft.tagline}
-                onChange={(e) => setDraft({ ...draft, tagline: e.target.value })}
-                className="input mt-1 !py-2 text-[12.5px]" />
-            </label>
-            <div className="flex items-center gap-3 pt-1">
-              <button onClick={save} disabled={saving || !dirty}
-                className="btn-primary !py-2 text-[12.5px] disabled:opacity-40">
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Paintbrush size={13} />}
-                Guardar y aplicar
-              </button>
-              {okMsg && !dirty && (
-                <span className="flex items-center gap-1 text-[11.5px]" style={{ color: "var(--ok)" }}>
-                  <Check size={13} /> Aplicado — el tema ya usa la nueva identidad
-                </span>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        {/* vista previa */}
-        <Card className="rise rise-2 self-start overflow-hidden">
-          <CardHeader title="Vista previa" sub="cómo se ve en el rail y el acceso" />
-          <div className="space-y-3 px-5 pb-5">
-            <div className="overflow-hidden rounded-xl p-4"
-              style={{ background: "var(--grad-deep)" }}>
-              <div className="overflow-hidden rounded-xl bg-white/[0.05] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)]">
-                <div className="h-[2.5px]"
-                  style={{ background: draft.accent ? draft.accent : "var(--grad-brand)" }} />
-                <div className="px-4 py-3">
-                  <div className="text-[12.5px] font-bold text-white">{draft.shortName || "—"}</div>
-                  <div className="mt-0.5 text-[10.5px] leading-snug text-white/40">{draft.institutionName}</div>
-                </div>
-              </div>
-              <div className="mt-3 font-mono text-[8.5px] uppercase tracking-[0.16em] text-white/50">
-                {draft.tagline}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="chip" style={draft.accent ? { color: draft.accent } : undefined}>acento</span>
-              <span className="h-[8px] flex-1 overflow-hidden rounded-full"
-                style={{ background: draft.accent ?? "var(--grad-brand)" }} />
-            </div>
-            <p className="text-[10px] leading-relaxed text-faint">
-              El acento re-tiñe los elementos de marca (kickers, spine, chips activos, gráficos) en
-              toda la plataforma. El logo institucional se carga en la fase con R2 activo.
-            </p>
-          </div>
-        </Card>
-      </div>
-    </>
   );
 }
 
