@@ -11,7 +11,7 @@ const MAX_AGE = 60 * 60 * 8; // 8 horas; el cierre por inactividad se renueva po
 export type SessionUser = {
   email: string;
   name: string;
-  role: "CONSULTOR" | "LIDER" | "RESPONSABLE" | "DIRECTIVO";
+  role: "ADMIN" | "CONSULTOR" | "LIDER" | "RESPONSABLE" | "DIRECTIVO";
   line?: number;
 };
 

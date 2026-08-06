@@ -184,6 +184,7 @@ export const QUADRANT = {
 };
 
 export const DEMO_USERS = [
+  { email: "admin@algoritmot.com", name: "Admin de la Plataforma", role: "ADMIN", password: "pgtd-demo-2026" },
   { email: "consultor@algoritmot.com", name: "Equipo Algoritmo T", role: "CONSULTOR", password: "pgtd-demo-2026" },
   { email: "lider@unicesar.edu.co", name: "Líder Institucional", role: "LIDER", password: "pgtd-demo-2026" },
   { email: "academica@unicesar.edu.co", name: "Responsable Academia", role: "RESPONSABLE", line: 1, password: "pgtd-demo-2026" },

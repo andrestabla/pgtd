@@ -555,9 +555,9 @@ test("permisos: la matriz cubre todos los módulos y todos los roles", () => {
       assert.ok(["read", "line", "full"].includes(acc.level), `${m}/${u.role}`);
     }
   }
-  // toda acción define los 4 roles
+  // toda acción define los 5 roles
   for (const [action, grants] of Object.entries(PERMISSION_MATRIX)) {
-    assert.equal(Object.keys(grants).length, 4, action);
+    assert.equal(Object.keys(grants).length, 5, action);
   }
 });
 

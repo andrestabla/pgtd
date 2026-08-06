@@ -30,7 +30,7 @@ export async function GET() {
   // 1 · alertas del motor, dirigidas por rol y línea
   for (const a of buildAlerts()) {
     const mine =
-      user.role === "CONSULTOR" || user.role === "LIDER" ? true
+      user.role === "ADMIN" || user.role === "CONSULTOR" || user.role === "LIDER" ? true
       : user.role === "RESPONSABLE" ? a.line === user.line
       : a.severity <= 2;                       // directivo: lo estratégico
     if (!mine) continue;
@@ -49,7 +49,7 @@ export async function GET() {
     const line = t ? INITIATIVES_FULL.find((i) => i.id === t.iniId)?.line : undefined;
     const mention = c.text.includes("@") && c.text.toLowerCase().includes(firstName);
     const inScope =
-      user.role === "CONSULTOR" || user.role === "LIDER" ? true
+      user.role === "ADMIN" || user.role === "CONSULTOR" || user.role === "LIDER" ? true
       : user.role === "RESPONSABLE" ? line === user.line
       : false;
     if (!inScope && !mention) continue;

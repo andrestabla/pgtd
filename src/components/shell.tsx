@@ -175,6 +175,7 @@ const NAV = [
 ];
 
 const ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Admin de la plataforma",
   CONSULTOR: "Consultor Algoritmo T",
   LIDER: "Líder institucional",
   RESPONSABLE: "Responsable de línea",
@@ -214,7 +215,7 @@ export function AppShell({ children, user }: {
       return !c;
     });
 
-  const current = [...NAV, { href: "/panel/admin", label: "Usuarios", code: undefined }]
+  const current = [...NAV, { href: "/panel/admin", label: "Administración", code: undefined }]
     .slice().reverse().find((n) =>
       n.href === "/panel" ? pathname === "/panel" : pathname.startsWith(n.href));
 
@@ -224,8 +225,8 @@ export function AppShell({ children, user }: {
     router.refresh();
   };
 
-  const navList = user.role === "CONSULTOR"
-    ? [...NAV, { href: "/panel/admin", label: "Usuarios", icon: Users2 }]
+  const navList = user.role === "ADMIN" || user.role === "CONSULTOR"
+    ? [...NAV, { href: "/panel/admin", label: "Administración", icon: Users2 }]
     : NAV;
 
   const navItems = (mini: boolean) => (

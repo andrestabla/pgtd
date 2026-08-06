@@ -1008,7 +1008,7 @@ export const getUsers = (): ManagedUser[] => users();
 export const findActiveUser = (email: string): ManagedUser | null =>
   users().find((u) => u.active && u.email.toLowerCase() === email.toLowerCase()) ?? null;
 
-const VALID_ROLES: SessionUser["role"][] = ["CONSULTOR", "LIDER", "RESPONSABLE", "DIRECTIVO"];
+const VALID_ROLES: SessionUser["role"][] = ["ADMIN", "CONSULTOR", "LIDER", "RESPONSABLE", "DIRECTIVO"];
 
 export function createUser(
   actor: SessionUser,
@@ -1061,9 +1061,9 @@ export function updateUser(
     if (!patch.active && u.email.toLowerCase() === actor.email.toLowerCase()) {
       return { ok: false, status: 422, error: "No puedes desactivar tu propia cuenta." };
     }
-    if (!patch.active && u.role === "CONSULTOR" &&
-        users().filter((x) => x.active && x.role === "CONSULTOR").length <= 1) {
-      return { ok: false, status: 422, error: "Debe quedar al menos un consultor activo." };
+    if (!patch.active && u.role === "ADMIN" &&
+        users().filter((x) => x.active && x.role === "ADMIN").length <= 1) {
+      return { ok: false, status: 422, error: "Debe quedar al menos un administrador activo." };
     }
     u.active = patch.active;
     changes.push(patch.active ? "reactivado" : "desactivado");
@@ -1073,9 +1073,9 @@ export function updateUser(
     if (!VALID_ROLES.includes(patch.role)) {
       return { ok: false, status: 422, error: "Rol inválido." };
     }
-    if (u.role === "CONSULTOR" &&
-        users().filter((x) => x.active && x.role === "CONSULTOR").length <= 1) {
-      return { ok: false, status: 422, error: "Debe quedar al menos un consultor activo." };
+    if (u.role === "ADMIN" && patch.role !== "ADMIN" &&
+        users().filter((x) => x.active && x.role === "ADMIN").length <= 1) {
+      return { ok: false, status: 422, error: "Debe quedar al menos un administrador activo." };
     }
     changes.push(`rol ${u.role} → ${patch.role}`);
     u.role = patch.role;
@@ -1203,8 +1203,8 @@ export function setIntegration(
   key: IntegrationKey,
   patch: { enabled?: boolean; fields?: Record<string, string> },
 ): { ok: true } | { ok: false; status: number; error: string } {
-  if (!can(user, "manage_users")) {
-    return { ok: false, status: 403, error: "Solo el equipo consultor configura integraciones." };
+  if (!can(user, "manage_platform")) {
+    return { ok: false, status: 403, error: "Solo el administrador de la plataforma configura integraciones." };
   }
   const spec = INTEGRATION_SPECS[key];
   if (!spec) return { ok: false, status: 404, error: "Integración desconocida." };
@@ -1264,8 +1264,8 @@ export function setBranding(
   user: SessionUser,
   patch: Partial<Branding>,
 ): { ok: true; branding: Branding } | { ok: false; status: number; error: string } {
-  if (!can(user, "manage_users")) {
-    return { ok: false, status: 403, error: "Solo el equipo consultor edita el branding." };
+  if (!can(user, "manage_platform")) {
+    return { ok: false, status: 403, error: "Solo el administrador de la plataforma edita el branding." };
   }
   const b = branding();
   if (patch.institutionName !== undefined) {

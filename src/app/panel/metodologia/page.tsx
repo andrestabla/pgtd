@@ -58,7 +58,8 @@ const ACTION_LABEL: Record<Action, string> = {
   capture_maturity: "Capturar celdas de una medición en curso",
   publish_maturity: "Publicar mediciones y configurar el instrumento",
   verify_evidence: "Verificar evidencia",
-  manage_users: "Administrar usuarios y permisos",
+  manage_users: "Administrar usuarios y roles",
+  manage_platform: "Integraciones, branding y configuración de la plataforma",
 };
 
 const ROLES: { key: Role; label: string }[] = [

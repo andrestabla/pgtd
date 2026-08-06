@@ -30,17 +30,23 @@ const TABS: { id: Tab; label: string; icon: typeof Users2 }[] = [
 
 export default function AdminPage() {
   const me = useUser();
-  const canManage = useCan("manage_users");
+  const canUsers = useCan("manage_users");
+  const canPlatform = useCan("manage_platform");
   const router = useRouter();
   const params = useParams<{ slug?: string[] }>();
-  const tab: Tab = (TABS.find((t) => t.id === params.slug?.[0])?.id ?? "usuarios");
 
-  if (!canManage) {
+  // el consultor solo administra usuarios y roles; el admin, todo el módulo
+  const visibleTabs = TABS.filter((t) =>
+    t.id === "usuarios" ? canUsers : canPlatform);
+  const tab: Tab = (visibleTabs.find((t) => t.id === params.slug?.[0])?.id
+    ?? visibleTabs[0]?.id ?? "usuarios");
+
+  if (!canUsers && !canPlatform) {
     return (
       <>
         <PageHeader kicker="Administración" title="Usuarios y permisos" />
         <p className="rounded-xl bg-surface-2 px-5 py-6 text-[13px] text-muted">
-          Solo el equipo consultor administra la plataforma. Tu rol ({me.role}) es de {me.role === "DIRECTIVO" ? "consulta" : "operación"}.
+          La administración es del admin de la plataforma (y usuarios/roles, también del consultor). Tu rol ({me.role}) es de {me.role === "DIRECTIVO" ? "consulta" : "operación"}.
         </p>
       </>
     );
@@ -53,7 +59,7 @@ export default function AdminPage() {
         actions={<AccessChip module="admin" />} />
 
       <div className="rise mb-6 flex flex-wrap gap-1.5 rounded-2xl bg-surface-2 p-1.5">
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button key={t.id}
             onClick={() => router.push(`/panel/admin/${t.id}`, { scroll: false })}
             className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[12.5px] font-bold transition-all ${
@@ -75,11 +81,12 @@ export default function AdminPage() {
 /* ═══ Usuarios y roles ═══ */
 
 type ManagedUser = {
-  email: string; name: string; role: "CONSULTOR" | "LIDER" | "RESPONSABLE" | "DIRECTIVO";
+  email: string; name: string; role: "ADMIN" | "CONSULTOR" | "LIDER" | "RESPONSABLE" | "DIRECTIVO";
   line?: number; active: boolean; seeded: boolean; createdBy?: string; at?: string;
 };
 
 const ROLE_LABEL: Record<ManagedUser["role"], string> = {
+  ADMIN: "Admin de la plataforma",
   CONSULTOR: "Consultor Algoritmo T",
   LIDER: "Líder institucional",
   RESPONSABLE: "Responsable de línea",
@@ -178,8 +185,9 @@ function UsersTab() {
 
       <p className="mt-5 flex items-start gap-2 text-[10.5px] leading-relaxed text-faint">
         <ShieldCheck size={12} className="mt-0.5 shrink-0" />
-        Reglas del servidor: no puedes desactivar tu propia cuenta y debe quedar al menos un consultor
-        activo. Contraseña demo compartida (pgtd-demo-2026) — con Auth.js pasa a invitación por correo.
+        Reglas del servidor: no puedes desactivar tu propia cuenta y debe quedar al menos un
+        administrador activo. Contraseña demo compartida (pgtd-demo-2026) — con Auth.js pasa a
+        invitación por correo.
       </p>
     </>
   );
@@ -240,10 +248,11 @@ const ACTION_DESC: Record<Action, string> = {
   capture_maturity: "Capturar la medición en curso (percepción de su ámbito)",
   publish_maturity: "Calificar D/I/K y nivel, y publicar mediciones",
   verify_evidence: "Verificar evidencia — la garantía de independencia",
-  manage_users: "Administración: usuarios, integraciones y branding",
+  manage_users: "Administrar usuarios y roles",
+  manage_platform: "Integraciones, branding y configuración de la plataforma",
 };
 
-const ROLES = ["CONSULTOR", "LIDER", "RESPONSABLE", "DIRECTIVO"] as const;
+const ROLES = ["ADMIN", "CONSULTOR", "LIDER", "RESPONSABLE", "DIRECTIVO"] as const;
 
 function PermisosTab() {
   return (

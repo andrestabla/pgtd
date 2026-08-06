@@ -9,6 +9,7 @@ import { AlgoritmoMark } from "@/components/logo";
 import { LogIn, Loader2 } from "lucide-react";
 
 const DEMO_ACCOUNTS = [
+  { label: "Admin de la plataforma", email: "admin@algoritmot.com" },
   { label: "Consultor Algoritmo T", email: "consultor@algoritmot.com" },
   { label: "Líder institucional", email: "lider@unicesar.edu.co" },
   { label: "Responsable de línea", email: "academica@unicesar.edu.co" },

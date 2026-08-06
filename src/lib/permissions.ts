@@ -5,6 +5,8 @@
 // UI la REFLEJA (controles ocultos o deshabilitados + chip de acceso).
 //
 // Roles:
+//  ADMIN       — administrador de la plataforma: usuarios, permisos,
+//                integraciones y branding. No opera la medición.
 //  CONSULTOR   — equipo Algoritmo T: configura el instrumento, publica
 //                mediciones, verifica evidencia. Edición completa.
 //  LIDER       — líder institucional: administra iniciativas, tareas y KPI
@@ -28,7 +30,8 @@ export type Action =
   | "capture_maturity"  // capturar celdas de una medición en curso
   | "publish_maturity"  // publicar mediciones / configurar el instrumento
   | "verify_evidence"   // marcar evidencia como VERIFICADA
-  | "manage_users";     // administrar usuarios y permisos
+  | "manage_users"      // administrar usuarios y roles
+  | "manage_platform";  // integraciones, branding y configuración de la plataforma
 
 export type Role = SessionUser["role"];
 
@@ -36,14 +39,15 @@ export type Role = SessionUser["role"];
 type Grant = boolean | "line";
 
 const MATRIX: Record<Action, Record<Role, Grant>> = {
-  view:             { CONSULTOR: true, LIDER: true, RESPONSABLE: true, DIRECTIVO: true },
-  edit_tasks:       { CONSULTOR: true, LIDER: true, RESPONSABLE: "line", DIRECTIVO: false },
-  edit_initiatives: { CONSULTOR: true, LIDER: true, RESPONSABLE: "line", DIRECTIVO: false },
-  report_kpi:       { CONSULTOR: true, LIDER: true, RESPONSABLE: "line", DIRECTIVO: false },
-  capture_maturity: { CONSULTOR: true, LIDER: false, RESPONSABLE: "line", DIRECTIVO: false },
-  publish_maturity: { CONSULTOR: true, LIDER: false, RESPONSABLE: false, DIRECTIVO: false },
-  verify_evidence:  { CONSULTOR: true, LIDER: false, RESPONSABLE: false, DIRECTIVO: false },
-  manage_users:     { CONSULTOR: true, LIDER: false, RESPONSABLE: false, DIRECTIVO: false },
+  view:             { ADMIN: true,  CONSULTOR: true, LIDER: true, RESPONSABLE: true, DIRECTIVO: true },
+  edit_tasks:       { ADMIN: false, CONSULTOR: true, LIDER: true, RESPONSABLE: "line", DIRECTIVO: false },
+  edit_initiatives: { ADMIN: false, CONSULTOR: true, LIDER: true, RESPONSABLE: "line", DIRECTIVO: false },
+  report_kpi:       { ADMIN: false, CONSULTOR: true, LIDER: true, RESPONSABLE: "line", DIRECTIVO: false },
+  capture_maturity: { ADMIN: false, CONSULTOR: true, LIDER: false, RESPONSABLE: "line", DIRECTIVO: false },
+  publish_maturity: { ADMIN: false, CONSULTOR: true, LIDER: false, RESPONSABLE: false, DIRECTIVO: false },
+  verify_evidence:  { ADMIN: false, CONSULTOR: true, LIDER: false, RESPONSABLE: false, DIRECTIVO: false },
+  manage_users:     { ADMIN: true,  CONSULTOR: true, LIDER: false, RESPONSABLE: false, DIRECTIVO: false },
+  manage_platform:  { ADMIN: true,  CONSULTOR: false, LIDER: false, RESPONSABLE: false, DIRECTIVO: false },
 };
 
 /** ¿Puede el usuario ejecutar la acción? `line` restringe al ámbito de su línea. */
@@ -70,7 +74,7 @@ export const MODULE_ACTIONS: Record<ModuleKey, Action[]> = {
   proyectos:    ["view", "edit_tasks", "verify_evidence"],
   bi:           ["view"],
   metodologia:  ["view"],
-  admin:        ["view", "manage_users"],
+  admin:        ["view", "manage_users", "manage_platform"],
 };
 
 /** Descripción del acceso del usuario a un módulo, para mostrar en la UI. */
