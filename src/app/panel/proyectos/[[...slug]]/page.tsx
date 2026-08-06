@@ -1,6 +1,9 @@
 "use client";
 
 // GP · Gestor de proyectos — Fase 1 con escritura real.
+// El seguimiento de cada iniciativa tiene ruta propia:
+//   /panel/proyectos          → portafolio completo
+//   /panel/proyectos/<iniId>  → plan de trabajo de esa iniciativa (i1…i14)
 // Los datos vienen del store del servidor (memoria + write-through a
 // Postgres); las mutaciones pasan por la matriz de permisos y las reglas de
 // negocio (403/422 con explicación). La UI refleja lo que el servidor exige:
@@ -8,6 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { PageHeader, Card, CardHeader, StatCard } from "@/components/ui";
 import { AccessChip, useUser } from "@/components/user-context";
 import { INITIATIVES, EVIDENCES } from "@/data/demo";
@@ -63,12 +67,27 @@ const monthIndex = (iso: string) => {
 
 export default function ProyectosPage() {
   const user = useUser();
+  const router = useRouter();
+  const params = useParams<{ slug?: string[] }>();
   const [view, setView] = useState<View>("tablero");
   const [data, setData] = useState<ApiData | null>(null);
-  const [iniFilter, setIniFilter] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return new URLSearchParams(window.location.search).get("ini");
-  });
+
+  // el seguimiento de cada iniciativa vive en la URL: /panel/proyectos/<iniId>
+  const slugIni = params.slug?.[0] ? decodeURIComponent(params.slug[0]).toLowerCase() : null;
+  const iniFilter = slugIni && INITIATIVES.some((i) => i.id === slugIni) ? slugIni : null;
+  const setIniFilter = (id: string | null) =>
+    router.push(id ? `/panel/proyectos/${id}` : "/panel/proyectos", { scroll: false });
+
+  // compatibilidad con los enlaces antiguos ?ini=<id>
+  useEffect(() => {
+    if (typeof window === "undefined" || iniFilter) return;
+    const legacy = new URLSearchParams(window.location.search).get("ini");
+    if (legacy && INITIATIVES.some((i) => i.id === legacy)) {
+      router.replace(`/panel/proyectos/${legacy}`, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   const [openTask, setOpenTask] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -131,12 +150,22 @@ export default function ProyectosPage() {
     );
   }
 
+  const currentIni = iniFilter ? INITIATIVES.find((i) => i.id === iniFilter) : null;
+
   return (
     <>
-      <PageHeader kicker="GP · Gestor de proyectos" title="Plan de trabajo del portafolio"
-        desc={`${data.stats.total} tareas en ${INITIATIVES.length} iniciativas · las mutaciones pasan por la matriz de permisos del servidor. Hoy (demo): ${fmtDate(DEMO_TODAY)}.`}
+      <PageHeader kicker={`GP · Gestor de proyectos${currentIni ? ` · ${currentIni.id.toUpperCase()}` : ""}`}
+        title={currentIni ? currentIni.name : "Plan de trabajo del portafolio"}
+        desc={currentIni
+          ? `Plan de trabajo de la iniciativa: ${filtered.length} tareas. Hoy (demo): ${fmtDate(DEMO_TODAY)}.`
+          : `${data.stats.total} tareas en ${INITIATIVES.length} iniciativas · las mutaciones pasan por la matriz de permisos del servidor. Hoy (demo): ${fmtDate(DEMO_TODAY)}.`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {currentIni && (
+              <Link href={`/panel/iniciativas/${currentIni.id}`} className="chip chip-gold">
+                Ficha de la iniciativa →
+              </Link>
+            )}
             <AccessChip module="proyectos" />
             <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
               {([["tablero", KanbanSquare, "Tablero"], ["cronograma", CalendarRange, "Cronograma"], ["personas", Users, "Personas"]] as const).map(([v, Icon, label]) => (

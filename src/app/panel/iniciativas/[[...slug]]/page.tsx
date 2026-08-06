@@ -216,7 +216,7 @@ function IniciativaFicha({ id, onClose, onNav }: {
               </span>
               <span className="chip">acciones {done}/{i.actions.length}</span>
               {ts.total > 0 && (
-                <Link href={`/panel/proyectos?ini=${i.id}`} className="chip chip-cyan">
+                <Link href={`/panel/proyectos/${i.id}`} className="chip chip-cyan">
                   tareas {ts.done}/{ts.total}
                   {ts.overdue > 0 && <b style={{ color: "var(--bad)" }}> · {ts.overdue} vencida{ts.overdue > 1 ? "s" : ""}</b>}
                   {" "}→
@@ -272,7 +272,7 @@ function IniciativaFicha({ id, onClose, onNav }: {
             <div className="mb-3 flex items-center justify-between">
               <span className="label">Acciones y metas de resultado</span>
               {ts.total > 0 && (
-                <Link href={`/panel/proyectos?ini=${i.id}`} className="chip chip-cyan">
+                <Link href={`/panel/proyectos/${i.id}`} className="chip chip-cyan">
                   Plan de trabajo · {ts.total} tareas →
                 </Link>
               )}

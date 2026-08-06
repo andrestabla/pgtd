@@ -105,7 +105,7 @@ export default function RutaPage() {
           <CardHeader title={ini.name} sub="Ficha de la iniciativa"
             right={
               <span className="flex items-center gap-2">
-                <Link href={`/panel/proyectos?ini=${ini.id}`} className="chip chip-cyan">Plan de trabajo →</Link>
+                <Link href={`/panel/proyectos/${ini.id}`} className="chip chip-cyan">Plan de trabajo →</Link>
                 <StatusChip status={ini.status} />
               </span>
             } />
