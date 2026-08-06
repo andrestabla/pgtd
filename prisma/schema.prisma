@@ -54,6 +54,23 @@ model Institution {
   createdAt    DateTime @default(now())
 }
 
+// ─── Gobierno del modelo: responsables y Cuadro de Mando Integral ───────────
+
+model Responsible {
+  id           String @id            // R01…
+  cargo        String
+  dependencia  String
+  rolPlataforma String               // LIDER | RESPONSABLE | APORTA | CONSULTA
+}
+
+model CmiObjective {
+  id          String @id             // OE-01…
+  perspective String                 // impacto | sostenibilidad | comunidad | procesos | innovacion
+  name        String
+  kpis        Json                   // códigos de KPI asociados
+  line        Int?
+}
+
 // ─── Instrumento y mediciones de madurez ────────────────────────────────────
 
 model MaturityModel {
@@ -111,6 +128,8 @@ model Evidence {
   scoreId    String
   score      Score    @relation(fields: [scoreId], references: [id], onDelete: Cascade)
   title      String
+  kind       String?  // Documento | Acta | Normativa | Informe | Sistema | Encuesta
+  status     String   @default("PENDIENTE") // VERIFICADA | PENDIENTE
   source     String?  // dependencia que la aporta
   fileUrl    String?  // objeto en R2
   note       String?
@@ -153,6 +172,8 @@ model Kpi {
   code          String
   name          String
   definition    String?
+  formula       String?
+  cmiObjective  String? // OE-xx
   unit          String  // %, número, razón…
   source        String? // sistema o dependencia que produce el dato
   ownerRole     String?
@@ -202,6 +223,12 @@ model Initiative {
   line           Int
   name           String
   description    String?
+  subsistema     String?  // Administrativo | Formación | Investigación | Proyección social | Bienestar
+  cmiObjective   String?  // OE-xx
+  metaResultado  String?
+  actions        Json?    // [{name, meta, status, quarter}]
+  log            Json?    // [{date, type, text}]
+  nextMilestone  Json?    // {date, text}
   horizon        Horizon
   impact         Int      // 1..5
   feasibility    Int      // 1..5

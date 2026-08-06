@@ -64,12 +64,17 @@ export default function LineDetail({ params }: PageProps<"/panel/madurez/[line]"
                 <p className="px-5 py-4 text-[12.5px] italic text-faint">Sin evidencia en el modo demo.</p>
               )}
               {evidences.map((e) => (
-                <div key={e.title} className="flex items-start gap-3 px-5 py-3">
+                <div key={e.id} className="flex items-start gap-3 px-5 py-3">
                   <FileText size={15} className="mt-0.5 shrink-0 text-cyan-deep" />
-                  <div>
-                    <div className="text-[13px] font-semibold text-ink">{e.title}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className="text-[13px] font-semibold text-ink">{e.title}</span>
+                      <span className={`chip ${e.status === "VERIFICADA" ? "chip-ok" : "chip-warn"}`}>
+                        {e.status === "VERIFICADA" ? "Verificada" : "Pendiente"}
+                      </span>
+                    </div>
                     <div className="text-[11.5px] text-muted">
-                      {DIMENSIONS.find((d) => d.key === e.dimension)?.name} · {e.source}
+                      {DIMENSIONS.find((d) => d.key === e.dimension)?.name} · {e.kind} · {e.source} · <span className="num">{e.date}</span>
                     </div>
                   </div>
                 </div>

@@ -7,6 +7,7 @@ import {
   INSTITUTION, LINES, DIMENSIONS, SCORES, EVIDENCES,
   CAPABILITIES, KPIS, INITIATIVES, DEMO_USERS,
 } from "../src/data/demo";
+import { RESPONSIBLES, CMI_OBJECTIVES } from "../src/data/cmi";
 
 const prisma = new PrismaClient();
 
@@ -30,6 +31,17 @@ async function main() {
         passwordHash: await bcrypt.hash(u.password, 10),
         institutionId: inst.id,
       },
+    });
+  }
+
+  // gobierno del modelo: responsables y CMI
+  for (const r of RESPONSIBLES) {
+    await prisma.responsible.upsert({ where: { id: r.id }, update: {}, create: { ...r } });
+  }
+  for (const o of CMI_OBJECTIVES) {
+    await prisma.cmiObjective.upsert({
+      where: { id: o.id }, update: {},
+      create: { id: o.id, perspective: o.perspective, name: o.name, kpis: o.kpis as never, line: o.line },
     });
   }
 
@@ -72,7 +84,11 @@ async function main() {
       });
       for (const ev of EVIDENCES.filter((e) => e.line === line.n && e.dimension === dim.key)) {
         await prisma.evidence.create({
-          data: { scoreId: score.id, title: ev.title, source: ev.source },
+          data: {
+            scoreId: score.id, title: ev.title, source: ev.source,
+            kind: ev.kind, status: ev.status, note: ev.note,
+            capturedAt: new Date(ev.date),
+          },
         });
       }
     }
@@ -107,6 +123,9 @@ async function main() {
         unit: k.unit,
         source: k.source,
         ownerRole: k.owner,
+        definition: k.definition,
+        formula: k.formula,
+        cmiObjective: k.cmi,
         frequency: k.frequency.toUpperCase() as never,
         baseline: k.baseline,
         target: k.target,
@@ -128,6 +147,12 @@ async function main() {
         institutionId: inst.id,
         line: i.line,
         name: i.name,
+        subsistema: i.subsistema,
+        cmiObjective: i.cmi,
+        metaResultado: i.metaResultado,
+        actions: i.actions as never,
+        log: i.log as never,
+        nextMilestone: i.nextMilestone as never,
         horizon: i.horizon,
         impact: i.impact,
         feasibility: i.feasibility,

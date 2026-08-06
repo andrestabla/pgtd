@@ -6,7 +6,8 @@ import { useState } from "react";
 import { PageHeader, Card, CardHeader, LevelBadge, EmptyNote } from "@/components/ui";
 import { MaturityRadar, MaturityHeatmap } from "@/components/charts";
 import { LINES, DIMENSIONS, SCORES, LEVELS, EVIDENCES } from "@/data/demo";
-import { FileText, X } from "lucide-react";
+import { ASSESSMENTS } from "@/data/cmi";
+import { FileText, X, CheckCircle2, Clock3, History } from "lucide-react";
 
 export default function MadurezPage() {
   const [cell, setCell] = useState<{ line: number; dim: string } | null>(null);
@@ -78,12 +79,21 @@ export default function MadurezPage() {
               ) : (
                 <div className="space-y-2">
                   {evidences.map((e) => (
-                    <div key={e.title}
-                      className="flex items-start gap-3 rounded-lg border border-line bg-surface-2/50 px-3.5 py-2.5">
+                    <div key={e.id}
+                      className="flex items-start gap-3 rounded-xl bg-surface-2/60 px-3.5 py-3">
                       <FileText size={15} className="mt-0.5 shrink-0 text-cyan-deep" />
-                      <div>
-                        <div className="text-[13px] font-semibold text-ink">{e.title}</div>
-                        <div className="text-[11.5px] text-muted">Fuente: {e.source}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] font-bold leading-snug text-ink">{e.title}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <span className="chip">{e.kind}</span>
+                          <span className={`chip ${e.status === "VERIFICADA" ? "chip-ok" : "chip-warn"}`}>
+                            {e.status === "VERIFICADA"
+                              ? <><CheckCircle2 size={10} /> Verificada</>
+                              : <><Clock3 size={10} /> Pendiente</>}
+                          </span>
+                          <span className="num text-[10px] text-faint">{e.date}</span>
+                        </div>
+                        <div className="mt-1 text-[11px] text-muted">Aporta: {e.source}{e.note ? ` — ${e.note}` : ""}</div>
                       </div>
                     </div>
                   ))}
@@ -93,6 +103,29 @@ export default function MadurezPage() {
           </div>
         </Card>
       )}
+
+      {/* historial de mediciones */}
+      <Card className="rise rise-3 mt-5">
+        <div className="flex items-center gap-2.5 px-5 pb-1 pt-4">
+          <History size={14} className="text-cyan-deep" />
+          <span className="p-title">Ciclo de medición</span>
+          <span className="p-sub">el valor del instrumento está en la serie, no en el dato único</span>
+        </div>
+        <div className="grid gap-3 px-5 pb-5 pt-2 sm:grid-cols-2">
+          {ASSESSMENTS.map((m) => (
+            <div key={m.id} className="rounded-xl bg-surface-2/60 px-4 py-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-[13px] font-bold text-ink">{m.label}</span>
+                <span className={`chip ${m.status === "PUBLICADA" ? "chip-ok" : "chip-cyan"}`}>
+                  {m.status === "PUBLICADA" ? "Publicada" : "En captura"}
+                </span>
+              </div>
+              <div className="num mt-0.5 text-[10.5px] text-faint">{m.period}</div>
+              <p className="mt-1 text-[11.5px] leading-snug text-muted">{m.note}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       {/* escala */}
       <div className="rise rise-3 mt-5 grid gap-3 sm:grid-cols-5">
