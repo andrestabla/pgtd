@@ -133,10 +133,26 @@ const capture = () => g.__pgtdCapture!;
 
 const hasDb = () => Boolean(process.env.DATABASE_URL);
 
-async function prisma() {
-  const { PrismaClient } = await import("@prisma/client");
-  const gp = globalThis as unknown as { __pgtdPrisma?: InstanceType<typeof PrismaClient> };
-  if (!gp.__pgtdPrisma) gp.__pgtdPrisma = new PrismaClient();
+// Import opaco: este módulo también entra al bundle del navegador (las
+// páginas cliente importan el store), pero el cliente Prisma y el driver
+// SQLite son solo-servidor. new Function esconde el import del bundler;
+// en el navegador nunca se ejecuta (hasDb() es false sin DATABASE_URL).
+const serverImport = new Function("m", "return import(m)") as (m: string) => Promise<Record<string, unknown>>;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyPrisma = any;
+
+async function prisma(): Promise<AnyPrisma> {
+  const gp = globalThis as unknown as { __pgtdPrisma?: AnyPrisma };
+  if (!gp.__pgtdPrisma) {
+    const { PrismaClient } = await serverImport("@prisma/client") as AnyPrisma;
+    const { PrismaBetterSqlite3 } = await serverImport("@prisma/adapter-better-sqlite3") as AnyPrisma;
+    // ruta absoluta: el runtime de Next puede resolver ./ contra otro CWD
+    let url = process.env.DATABASE_URL!;
+    if (url.startsWith("file:./")) url = "file:" + process.cwd() + "/" + url.slice(7);
+    const adapter = new PrismaBetterSqlite3({ url });
+    gp.__pgtdPrisma = new PrismaClient({ adapter });
+  }
   return gp.__pgtdPrisma;
 }
 
@@ -145,7 +161,11 @@ export async function hydrateFromDb() {
   if (!hasDb() || g.__pgtdHydrated) return;
   try {
     const db = await prisma();
-    const rows = await db.projectTask.findMany();
+    type DbTaskRow = {
+      id: string; status: string; assigneeId: string; coAssigneeIds: unknown;
+      start: Date; due: Date; note: string | null; evidenceIds: unknown;
+    };
+    const rows = (await db.projectTask.findMany()) as DbTaskRow[];
     if (rows.length) {
       const byId = new Map(rows.map((r) => [r.id, r]));
       for (const t of tasks()) {
@@ -323,8 +343,10 @@ export async function updateTask(
           note: t.note,
         },
       });
-    } catch {
+    } catch (e) {
       // la memoria queda como fuente; la reconciliación ocurre al reconectar
+      console.error("[pgtd] write-through falló:", (e as Error).message,
+        "· cwd:", process.cwd(), "· url:", process.env.DATABASE_URL);
     }
   }
 

@@ -1,29 +1,23 @@
 // PGTD · Plataforma de Gestión de la Transformación Digital — Algoritmo T
-// Motor: PostgreSQL vía Prisma. Multi-institución desde el día 1.
+// Motor: SQLite local vía Prisma (archivo var/pgtd.db) — sin servicios
+// externos; el mismo esquema migra a PostgreSQL cambiando el datasource.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
 
 // ─── Identidad ───────────────────────────────────────────────────────────────
-
-enum Role {
-  CONSULTOR      // Algoritmo T: configura instrumento, publica mediciones
-  LIDER          // Líder institucional: administra iniciativas, KPI, presupuesto
-  RESPONSABLE    // Responsable de línea: evidencia y avances de su línea
-  DIRECTIVO      // Rectoría / Consejo: solo lectura
-}
 
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
   name          String
   passwordHash  String
-  role          Role      @default(DIRECTIVO)
+  role          String    @default("DIRECTIVO")   // CONSULTOR | LIDER | RESPONSABLE | DIRECTIVO
   line          Int?      // 1..4 si es RESPONSABLE
   institutionId String
   institution   Institution @relation(fields: [institutionId], references: [id])
@@ -90,7 +84,7 @@ model ProjectTask {
   title            String
   desc             String?            // alcance verificable de la actividad
   assigneeId       String             // responsable principal
-  coAssigneeIds    String[] @default([])  // corresponsables (Person.id)
+  coAssigneeIds    Json?                  // corresponsables (Person.id[])
   assignee         Person   @relation(fields: [assigneeId], references: [id])
   start            DateTime
   due              DateTime
@@ -168,12 +162,6 @@ model MaturityModel {
   createdAt   DateTime @default(now())
 }
 
-enum AssessmentStatus {
-  DRAFT
-  IN_REVIEW
-  PUBLISHED
-}
-
 model Assessment {
   id            String   @id @default(cuid())
   institutionId String
@@ -183,7 +171,7 @@ model Assessment {
   label         String   // "Línea base · Fase 0"
   periodStart   DateTime
   periodEnd     DateTime
-  status        AssessmentStatus @default(DRAFT)
+  status        String   @default("DRAFT")       // DRAFT | EN_CAPTURA | PUBLICADA
   publishedAt   DateTime?
   scores        Score[]
   createdAt     DateTime @default(now())
@@ -239,13 +227,6 @@ model Capability {
 
 // ─── Indicadores ─────────────────────────────────────────────────────────────
 
-enum KpiFrequency {
-  MENSUAL
-  TRIMESTRAL
-  SEMESTRAL
-  ANUAL
-}
-
 model Kpi {
   id            String  @id @default(cuid())
   institutionId String
@@ -259,7 +240,7 @@ model Kpi {
   unit          String  // %, número, razón…
   source        String? // sistema o dependencia que produce el dato
   ownerRole     String?
-  frequency     KpiFrequency @default(TRIMESTRAL)
+  frequency     String   @default("TRIMESTRAL")  // MENSUAL | TRIMESTRAL | SEMESTRAL | ANUAL
   baseline      Float?
   target        Float?
   goodDirection String  @default("up") // up | down
@@ -284,20 +265,6 @@ model KpiValue {
 
 // ─── Roadmap e iniciativas ───────────────────────────────────────────────────
 
-enum Horizon {
-  CORTO      // 0–12 meses
-  MEDIANO    // 12–36 meses
-  LARGO
-}
-
-enum InitiativeStatus {
-  PLANEADA
-  EN_CURSO
-  EN_RIESGO
-  COMPLETADA
-  SUSPENDIDA
-}
-
 model Initiative {
   id             String   @id @default(cuid())
   institutionId  String
@@ -311,10 +278,10 @@ model Initiative {
   actions        Json?    // [{name, meta, status, quarter}]
   log            Json?    // [{date, type, text}]
   nextMilestone  Json?    // {date, text}
-  horizon        Horizon
+  horizon        String                            // CORTO | MEDIANO
   impact         Int      // 1..5
   feasibility    Int      // 1..5
-  status         InitiativeStatus @default(PLANEADA)
+  status         String   @default("PLANEADA")   // PLANEADA | EN_CURSO | EN_RIESGO | COMPLETADA
   ownerRole      String?
   startQuarter   String?  // "2026-T3"
   endQuarter     String?
@@ -331,18 +298,12 @@ model Initiative {
   @@index([institutionId, horizon])
 }
 
-enum FactorState {
-  VERDE
-  AMBAR
-  ROJO
-}
-
 model SuccessFactor {
   id           String   @id @default(cuid())
   initiativeId String
   initiative   Initiative @relation(fields: [initiativeId], references: [id], onDelete: Cascade)
   name         String
-  state        FactorState @default(VERDE)
+  state        String   @default("VERDE")         // VERDE | AMBAR | ROJO
   history      Json?    // [{period:"jun", state:"VERDE"}]
   note         String?
   reviewedAt   DateTime @default(now())

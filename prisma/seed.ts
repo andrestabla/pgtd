@@ -2,6 +2,7 @@
 // Uso: npm run db:seed  (requiere DATABASE_URL)
 
 import { PrismaClient } from "@prisma/client";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import bcrypt from "bcryptjs";
 import {
   INSTITUTION, LINES, DIMENSIONS, SCORES, EVIDENCES,
@@ -11,7 +12,8 @@ import { RESPONSIBLES, CMI_OBJECTIVES } from "../src/data/cmi";
 import { PROGRAMS } from "../src/data/portfolio";
 import { PEOPLE, TASKS } from "../src/data/proyectos";
 
-const prisma = new PrismaClient();
+const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL ?? "file:./var/pgtd.db" });
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   const inst = await prisma.institution.upsert({
