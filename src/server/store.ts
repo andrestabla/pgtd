@@ -973,6 +973,131 @@ export const effectiveAssessments = () =>
       ? { id: a.id, label: a.label, period: g.__pgtdPublished!.period, status: "PUBLICADA" as const, note: g.__pgtdPublished!.note }
       : { id: a.id, label: a.label, period: a.period, status: a.status, note: a.note });
 
+/* ═══ Administración de usuarios (manage_users) ═══
+   Usuarios efectivos: los del seed + los creados desde la plataforma.
+   Contraseña demo compartida; con la migración a Auth.js, alta con
+   invitación y hash bcrypt por usuario. */
+
+export type ManagedUser = {
+  email: string;
+  name: string;
+  role: SessionUser["role"];
+  line?: number;
+  active: boolean;
+  seeded: boolean;             // vino del seed (no se elimina, solo se desactiva)
+  createdBy?: string;
+  at?: string;
+};
+
+import { DEMO_USERS } from "@/data/demo";
+
+const users = () => {
+  const gu = g as unknown as { __pgtdUsers?: ManagedUser[] };
+  if (!gu.__pgtdUsers) {
+    gu.__pgtdUsers = DEMO_USERS.map((u) => ({
+      email: u.email, name: u.name, role: u.role as SessionUser["role"],
+      line: "line" in u ? (u as { line?: number }).line : undefined,
+      active: true, seeded: true,
+    }));
+  }
+  return gu.__pgtdUsers;
+};
+
+export const getUsers = (): ManagedUser[] => users();
+
+export const findActiveUser = (email: string): ManagedUser | null =>
+  users().find((u) => u.active && u.email.toLowerCase() === email.toLowerCase()) ?? null;
+
+const VALID_ROLES: SessionUser["role"][] = ["CONSULTOR", "LIDER", "RESPONSABLE", "DIRECTIVO"];
+
+export function createUser(
+  actor: SessionUser,
+  input: { email: string; name: string; role: SessionUser["role"]; line?: number },
+): { ok: true; user: ManagedUser } | { ok: false; status: number; error: string } {
+  if (!can(actor, "manage_users")) {
+    return { ok: false, status: 403, error: "Solo el equipo consultor administra usuarios." };
+  }
+  const email = input.email?.trim().toLowerCase() ?? "";
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return { ok: false, status: 422, error: "Correo inválido." };
+  }
+  if (users().some((u) => u.email.toLowerCase() === email)) {
+    return { ok: false, status: 422, error: "Ya existe un usuario con ese correo." };
+  }
+  if (!input.name?.trim() || input.name.trim().length < 5) {
+    return { ok: false, status: 422, error: "El nombre debe ser completo (mínimo 5 caracteres)." };
+  }
+  if (!VALID_ROLES.includes(input.role)) {
+    return { ok: false, status: 422, error: "Rol inválido." };
+  }
+  if (input.role === "RESPONSABLE" && ![1, 2, 3, 4].includes(input.line ?? 0)) {
+    return { ok: false, status: 422, error: "El responsable de línea exige una línea (4.1–4.4)." };
+  }
+  const user: ManagedUser = {
+    email, name: input.name.trim(), role: input.role,
+    line: input.role === "RESPONSABLE" ? input.line : undefined,
+    active: true, seeded: false,
+    createdBy: actor.name, at: new Date().toISOString(),
+  };
+  users().push(user);
+  audit(actor, "task", email, `usuario creado (${input.role}${user.line ? ` · línea 4.${user.line}` : ""})`);
+  return { ok: true, user };
+}
+
+export function updateUser(
+  actor: SessionUser,
+  email: string,
+  patch: { role?: SessionUser["role"]; line?: number; active?: boolean },
+): { ok: true; user: ManagedUser } | { ok: false; status: number; error: string } {
+  if (!can(actor, "manage_users")) {
+    return { ok: false, status: 403, error: "Solo el equipo consultor administra usuarios." };
+  }
+  const u = users().find((x) => x.email.toLowerCase() === email.toLowerCase());
+  if (!u) return { ok: false, status: 404, error: "El usuario no existe." };
+
+  const changes: string[] = [];
+
+  if (patch.active !== undefined && patch.active !== u.active) {
+    if (!patch.active && u.email.toLowerCase() === actor.email.toLowerCase()) {
+      return { ok: false, status: 422, error: "No puedes desactivar tu propia cuenta." };
+    }
+    if (!patch.active && u.role === "CONSULTOR" &&
+        users().filter((x) => x.active && x.role === "CONSULTOR").length <= 1) {
+      return { ok: false, status: 422, error: "Debe quedar al menos un consultor activo." };
+    }
+    u.active = patch.active;
+    changes.push(patch.active ? "reactivado" : "desactivado");
+  }
+
+  if (patch.role !== undefined && patch.role !== u.role) {
+    if (!VALID_ROLES.includes(patch.role)) {
+      return { ok: false, status: 422, error: "Rol inválido." };
+    }
+    if (u.role === "CONSULTOR" &&
+        users().filter((x) => x.active && x.role === "CONSULTOR").length <= 1) {
+      return { ok: false, status: 422, error: "Debe quedar al menos un consultor activo." };
+    }
+    changes.push(`rol ${u.role} → ${patch.role}`);
+    u.role = patch.role;
+    if (patch.role !== "RESPONSABLE") u.line = undefined;
+  }
+
+  if (patch.line !== undefined && patch.line !== u.line) {
+    if (u.role !== "RESPONSABLE") {
+      return { ok: false, status: 422, error: "La línea solo aplica al responsable de línea." };
+    }
+    if (![1, 2, 3, 4].includes(patch.line)) {
+      return { ok: false, status: 422, error: "Línea inválida (1–4)." };
+    }
+    changes.push(`línea → 4.${patch.line}`);
+    u.line = patch.line;
+  }
+
+  if (changes.length === 0) return { ok: false, status: 422, error: "Nada que actualizar." };
+  audit(actor, "task", u.email, `usuario: ${changes.join(" · ")}`);
+  return { ok: true, user: u };
+}
+
 /* ═══ Notificaciones: estado de lectura por usuario ═══ */
 
 const notifRead = () => {
@@ -1005,6 +1130,7 @@ export function resetStore() {
   g.__pgtdIniOverrides = new Map();
   (g as unknown as { __pgtdArchived?: Task[] }).__pgtdArchived = [];
   (g as unknown as { __pgtdNotifRead?: Map<string, Set<string>> }).__pgtdNotifRead = new Map();
+  (g as unknown as { __pgtdUsers?: ManagedUser[] }).__pgtdUsers = undefined;
 }
 
 export { DEMO_TODAY, responsible };

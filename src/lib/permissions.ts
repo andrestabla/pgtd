@@ -18,7 +18,7 @@ import type { SessionUser } from "@/lib/session";
 
 export type ModuleKey =
   | "panel" | "madurez" | "benchmark" | "capacidades"
-  | "kpi" | "ruta" | "iniciativas" | "proyectos" | "bi" | "metodologia";
+  | "kpi" | "ruta" | "iniciativas" | "proyectos" | "bi" | "metodologia" | "admin";
 
 export type Action =
   | "view"              // ver el módulo
@@ -70,6 +70,7 @@ export const MODULE_ACTIONS: Record<ModuleKey, Action[]> = {
   proyectos:    ["view", "edit_tasks", "verify_evidence"],
   bi:           ["view"],
   metodologia:  ["view"],
+  admin:        ["view", "manage_users"],
 };
 
 /** Descripción del acceso del usuario a un módulo, para mostrar en la UI. */

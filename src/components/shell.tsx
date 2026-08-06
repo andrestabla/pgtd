@@ -11,7 +11,7 @@ import {
   Radar, Globe2, Network, Gauge, Map as MapIcon, ListChecks,
   BarChart3, LayoutDashboard, LogOut, Menu, X, Share2, FlaskConical, KanbanSquare, BookOpen,
   PanelLeftClose, PanelLeftOpen, Bell, ShieldAlert, AlertTriangle, Info, AtSign, CheckCheck,
-  FileText,
+  FileText, Users2,
 } from "lucide-react";
 import { AlgoritmoMark } from "@/components/logo";
 import { CommandPalette, SearchButton } from "@/components/command-palette";
@@ -202,8 +202,9 @@ export function AppShell({ children, user }: {
       return !c;
     });
 
-  const current = NAV.slice().reverse().find((n) =>
-    n.href === "/panel" ? pathname === "/panel" : pathname.startsWith(n.href));
+  const current = [...NAV, { href: "/panel/admin", label: "Usuarios", code: undefined }]
+    .slice().reverse().find((n) =>
+      n.href === "/panel" ? pathname === "/panel" : pathname.startsWith(n.href));
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -211,10 +212,14 @@ export function AppShell({ children, user }: {
     router.refresh();
   };
 
+  const navList = user.role === "CONSULTOR"
+    ? [...NAV, { href: "/panel/admin", label: "Usuarios", icon: Users2 }]
+    : NAV;
+
   const navItems = (mini: boolean) => (
     <nav className={`flex flex-col gap-1 ${mini ? "px-2.5" : "px-3"}`}>
       {!mini && <div className="label mb-1 px-3 !text-white/30">Módulos</div>}
-      {NAV.map((item) => {
+      {navList.map((item) => {
         const active = item.href === "/panel"
           ? pathname === "/panel"
           : pathname.startsWith(item.href);
