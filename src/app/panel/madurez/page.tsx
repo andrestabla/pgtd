@@ -16,10 +16,11 @@ import {
   VARIABLES, variablesOf, gapOf, DOMAINS, domainScore, type Variable, type Frame,
 } from "@/data/instrument";
 import { REG_CALIFICADOS, regCalStats, programOf } from "@/data/regcal";
+import { iesSummary, P as pIES, E as eIES, S as sIES, gapReading, IES_LEVELS, levelOf } from "@/lib/ies";
 import { KPIS, INITIATIVES } from "@/data/demo";
 import {
   FileText, X, CheckCircle2, Clock3, History, ChevronDown, BookOpenCheck,
-  Search, Lightbulb, AlertCircle, Layers, ScrollText,
+  Search, Lightbulb, AlertCircle, Layers, ScrollText, Sigma, ShieldAlert,
 } from "lucide-react";
 
 const LEVEL_BG = ["", "var(--n1)", "var(--n2)", "var(--n3)", "var(--n4)", "var(--n5)"];
@@ -29,13 +30,14 @@ const FRAME_COLORS: Record<Frame, string> = {
   "ISO 27001": "var(--bad)", CMI: "var(--muted)",
 };
 
-type Tab = "resumen" | "variables" | "dominios" | "registros";
+type Tab = "resumen" | "variables" | "dominios" | "registros" | "ies";
 
 const TABS: { id: Tab; label: string; icon: typeof Layers }[] = [
   { id: "resumen", label: "Resumen", icon: Layers },
   { id: "variables", label: "Variables del instrumento", icon: Search },
   { id: "dominios", label: "Dominios diagnósticos", icon: BookOpenCheck },
   { id: "registros", label: "Registros calificados", icon: ScrollText },
+  { id: "ies", label: "Índices IES", icon: Sigma },
 ];
 
 export default function MadurezPage() {
@@ -290,6 +292,9 @@ export default function MadurezPage() {
         </div>
       )}
 
+      {/* ═══════════ ÍNDICES IES ═══════════ */}
+      {tab === "ies" && <IesView />}
+
       {/* ═══════════ REGISTROS CALIFICADOS ═══════════ */}
       {tab === "registros" && (
         <>
@@ -379,6 +384,214 @@ export default function MadurezPage() {
   );
 }
 
+/* ─── vista AlgoritmoT-IES ─── */
+
+function IesView() {
+  const ies = iesSummary();
+  const LINE_NAME: Record<number, string> = {
+    1: "Formación y docencia", 2: "Investigación, innovación y creación",
+    3: "Extensión y proyección social", 4: "Gestión institucional habilitante",
+  };
+  const W: Record<number, string> = { 1: "30 %", 2: "25 %", 3: "20 %", 4: "25 %" };
+  return (
+    <>
+      {/* índice institucional + AIQ */}
+      <div className="rise mb-5 grid gap-4 lg:grid-cols-3">
+        <div className="panel relative overflow-hidden px-6 py-5">
+          <div className="spine absolute inset-x-0 top-0 h-[3px]" />
+          <div className="label mb-1">Índice institucional IIES</div>
+          <div className="flex items-baseline gap-3">
+            <span className="num text-[42px] font-extrabold text-ink">{ies.iies.toFixed(1)}</span>
+            <span className="rounded-full px-3 py-1 text-[11.5px] font-bold text-white"
+              style={{ background: ies.level.color }}>{ies.level.name}</span>
+          </div>
+          <p className="mt-1 text-[11.5px] leading-snug text-muted">{ies.level.desc}</p>
+          <div className="num mt-2 text-[10px] text-faint">
+            0,30·Formación + 0,25·Investigación + 0,20·Extensión + 0,25·Gestión
+          </div>
+        </div>
+
+        <div className="panel px-6 py-5">
+          <div className="label mb-1">Cobertura de evidencia</div>
+          <div className="num text-[42px] font-extrabold text-ink">{Math.round(ies.coverage)} %</div>
+          <p className="mt-1 text-[11.5px] leading-snug text-muted">
+            Ítems con evidencia suficiente (D≥2, I≥2, K≥1). Un puntaje sin cobertura
+            no tiene la misma confianza: se reportan siempre juntos.
+          </p>
+        </div>
+
+        <div className="panel relative overflow-hidden px-6 py-5">
+          {ies.aiq.capApplied && <div className="absolute inset-x-0 top-0 h-[3px]" style={{ background: "var(--bad)" }} />}
+          <div className="label mb-1">AIQ-IES · preparación y adopción de IA</div>
+          <div className="flex items-baseline gap-2.5">
+            <span className="num text-[42px] font-extrabold text-ink">{Math.round(ies.aiq.capped)}</span>
+            {ies.aiq.capApplied && (
+              <span className="chip chip-bad" title={`Sin salvaguardas el puntaje sería ${Math.round(ies.aiq.raw)}`}>
+                capado a {ies.aiq.cap} por salvaguarda
+              </span>
+            )}
+          </div>
+          <div className="num mt-1 flex gap-4 text-[11px] text-muted">
+            <span>preparación <b className="text-ink">{Math.round(ies.aiq.preparacion)}</b></span>
+            <span>adopción e impacto <b className="text-ink">{Math.round(ies.aiq.adopcion)}</b></span>
+          </div>
+        </div>
+      </div>
+
+      {/* índices por línea misional */}
+      <div className="rise rise-1 mb-5 grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="Índices por línea misional" sub="M_l = promedio de S sobre las variables de la línea · peso en el IIES" />
+          <div className="space-y-4 px-5 pb-5">
+            {ies.lines.map(({ line, index }) => {
+              const lv = levelOf(index);
+              return (
+                <div key={line}>
+                  <div className="mb-1 flex items-baseline justify-between">
+                    <span className="text-[13px] font-bold text-ink">
+                      {LINE_NAME[line]} <span className="num text-[10px] font-medium text-faint">peso {W[line]}</span>
+                    </span>
+                    <span className="num text-[13px] font-extrabold" style={{ color: lv.color }}>
+                      {index.toFixed(1)} · {lv.name}
+                    </span>
+                  </div>
+                  <div className="h-[9px] overflow-hidden rounded-full bg-surface-2">
+                    <div className="h-full rounded-full" style={{ width: `${index}%`, background: lv.color }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="Índices por dimensión transversal" sub="DT_d ponderado por misión — ¿dónde es débil la capacidad, en qué misión?" />
+          <div className="space-y-3 px-5 pb-5">
+            {ies.dims.map((d) => {
+              const lv = levelOf(d.index);
+              return (
+                <div key={d.d7} className="flex items-center gap-3">
+                  <span className="num w-7 shrink-0 text-[10px] font-bold text-cyan-deep">{d.d7}</span>
+                  <span className="w-40 shrink-0 truncate text-[12px] font-semibold text-ink">{d.short}</span>
+                  <div className="h-[8px] flex-1 overflow-hidden rounded-full bg-surface-2">
+                    <div className="h-full rounded-full" style={{ width: `${d.index}%`, background: lv.color }} />
+                  </div>
+                  <span className="num w-9 shrink-0 text-right text-[12px] font-bold text-ink">{d.index.toFixed(0)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      </div>
+
+      {/* matriz 4×7 */}
+      <Card className="rise rise-2 mb-5">
+        <CardHeader title="Matriz misional 4 × 7" sub="Puntuación verificada S por línea × dimensión transversal (— = sin variables en esta versión del banco)" />
+        <div className="overflow-x-auto px-5 pb-5">
+          <table className="w-full min-w-[720px]">
+            <thead>
+              <tr>
+                <th className="label pb-2 text-left !text-[8.5px]">Línea misional</th>
+                {ies.dims.map((d) => (
+                  <th key={d.d7} className="label pb-2 text-center !text-[8.5px]" title={d.name}>{d.d7}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ies.matrix.map((row) => (
+                <tr key={row.line}>
+                  <td className="py-1.5 pr-3 text-[12px] font-bold text-ink">{LINE_NAME[row.line]}</td>
+                  {row.cells.map(({ d7, cell }) => (
+                    <td key={d7} className="p-1">
+                      {cell ? (
+                        <div className="num rounded-lg py-2 text-center text-[13px] font-extrabold text-white"
+                          style={{ background: levelOf(cell.s).color }}
+                          title={`${cell.n} variable(s) · ${levelOf(cell.s).name}`}>
+                          {cell.s.toFixed(0)}
+                        </div>
+                      ) : (
+                        <div className="rounded-lg bg-surface-2 py-2 text-center text-[12px] text-faint">—</div>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {IES_LEVELS.map((l) => (
+              <span key={l.name} className="flex items-center gap-1.5 text-[10.5px] text-muted">
+                <i className="h-2.5 w-2.5 rounded" style={{ background: l.color }} />
+                {l.name} ({l.min}–{l.max})
+              </span>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      <div className="rise rise-3 grid gap-5 lg:grid-cols-2">
+        {/* brechas percepción-evidencia */}
+        <Card>
+          <CardHeader title="Brechas percepción − evidencia" sub="|Δ| > 20: sobreestimación o práctica invisible — hallazgos de gestión, no de tecnología" />
+          <div className="space-y-2 px-5 pb-5">
+            {ies.gaps.map((g) => (
+              <div key={g.id} className="rounded-xl bg-surface-2/60 px-3.5 py-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[12.5px] font-bold text-ink">
+                    <span className="num mr-1.5 text-[9.5px] text-cyan-deep">{g.id}</span>{g.name}
+                  </span>
+                  <span className={`chip shrink-0 ${g.reading === "SOBREESTIMACION" ? "chip-warn" : "chip-cyan"}`}>
+                    {g.reading === "SOBREESTIMACION" ? "Sobreestimación" : "Práctica invisible"}
+                  </span>
+                </div>
+                <div className="num mt-1 text-[10.5px] text-muted">
+                  percepción {g.p.toFixed(0)} · evidencia {g.e.toFixed(0)} · Δ {g.delta > 0 ? "+" : ""}{g.delta.toFixed(0)}
+                </div>
+                <div className="mt-1.5 flex h-[6px] gap-0.5">
+                  <div className="rounded-l-full bg-line-strong" style={{ width: `${g.p / 2}%` }} title="percepción" />
+                  <div className="rounded-r-full" style={{ width: `${g.e / 2}%`, background: "var(--cyan)" }} title="evidencia" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* salvaguardas */}
+        <Card>
+          <CardHeader title="Semáforo de salvaguardas" sub="El promedio no oculta riesgos críticos: una salvaguarda en falla capa el AIQ-IES" />
+          <div className="space-y-2 px-5 pb-5">
+            {ies.aiq.safeguards.map((sg) => (
+              <div key={sg.id} className="flex items-start gap-3 rounded-xl bg-surface-2/60 px-3.5 py-2.5">
+                <ShieldAlert size={15} className="mt-0.5 shrink-0"
+                  style={{ color: sg.status === "FALLA" ? "var(--bad)" : sg.status === "PARCIAL" ? "var(--warn)" : "var(--ok)" }} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-[12.5px] font-bold leading-snug text-ink">{sg.rule}</span>
+                    <span className={`chip shrink-0 ${
+                      sg.status === "FALLA" ? "chip-bad" : sg.status === "PARCIAL" ? "chip-warn" : "chip-ok"}`}>
+                      {sg.status === "FALLA" ? `Falla · capa a ${sg.cap}` : sg.status === "PARCIAL" ? "Parcial" : "Cumple"}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[11.5px] leading-snug text-muted">{sg.note}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-line px-5 py-2.5 text-[10.5px] text-faint">
+            Componentes AIQ: {ies.aiq.components.map((c) => `${c.key} ${Math.round(c.score)}`).join(" · ")}
+          </div>
+        </Card>
+      </div>
+
+      <p className="mt-5 text-[10.5px] leading-relaxed text-faint">
+        Metodología AlgoritmoT-IES (deep-research-report): S = 0,40·P + 0,60·E con E = 0,25·D + 0,35·I + 0,40·K.
+        Percepción marcada como provisional hasta auditoría; pesos iniciales iguales por ítem; los puntos de corte
+        son guías diagnósticas sujetas a calibración en pilotos. Datos ilustrativos.
+      </p>
+    </>
+  );
+}
+
 /* ─── fila expandible de variable ─── */
 
 function VariableRow({ v, idx, open, onToggle }: {
@@ -438,6 +651,22 @@ function VariableRow({ v, idx, open, onToggle }: {
               <p className="text-[12px] leading-relaxed text-ink-soft">
                 <b>Recomendación:</b> {v.recomendacion}
               </p>
+            </div>
+            {/* puntuación AlgoritmoT-IES */}
+            <div className="mt-2 rounded-lg bg-surface-2/70 px-3 py-2.5">
+              <div className="label mb-1.5 !text-[8px]">Puntuación IES · S = 0,40·P + 0,60·E</div>
+              <div className="num flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[11.5px] text-muted">
+                <span>percepción <b className="text-ink">{pIES(v).toFixed(0)}</b></span>
+                <span>evidencia <b className="text-ink">{eIES(v).toFixed(0)}</b>
+                  <span className="text-[9px] text-faint"> (D{v.evidence.d}·I{v.evidence.i}·K{v.evidence.k})</span></span>
+                <span>verificada <b className="text-[13px] text-cyan-deep">{sIES(v).toFixed(0)}</b></span>
+                <span className="text-[10px]">{levelOf(sIES(v)).name} · {v.d7}</span>
+                {gapReading(v) !== "CONVERGENCIA" && (
+                  <span className={`chip ${gapReading(v) === "SOBREESTIMACION" ? "chip-warn" : "chip-cyan"}`}>
+                    {gapReading(v) === "SOBREESTIMACION" ? "Δ sobreestimación" : "Δ práctica invisible"}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div>

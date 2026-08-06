@@ -21,15 +21,23 @@ export type Frame =
   | "ISO 27001"      // seguridad de la información
   | "CMI";           // cuadro de mando integral (Kaplan-Norton)
 
+export type D7 = "D1" | "D2" | "D3" | "D4" | "D5" | "D6" | "D7";
+
 export type Variable = {
   id: string;                // p.ej. AV-ORG-1
   line: number;              // 1..4
   dimension: string;         // organizacional | misional | tecnologica | datos
+  d7: D7;                    // proyección a la dimensión transversal AlgoritmoT-IES
+  ai?: boolean;              // variable del componente AIQ-IES
   name: string;
   desc: string;              // qué mide exactamente
   frame: Frame;
-  value: number;             // 1..5 (medición vigente A2)
+  value: number;             // 1..5 (nivel verificado, medición vigente A2)
   target: number;            // meta a 24 meses
+  // Metodología AlgoritmoT-IES (deep-research-report):
+  // percepción Likert 1–5 del autodiagnóstico; evidencia D/I/K en 0–4.
+  perception: number;
+  evidence: { d: number; i: number; k: number };
   ownerId: string;           // responsable de la información (directorio)
   evidenceIds: string[];     // EV-xx del catálogo
   hallazgo: string;          // el hecho encontrado
@@ -41,7 +49,8 @@ export const VARIABLES: Variable[] = [
 
   // ── organizacional (celda = 2) ──
   {
-    id: "AV-ORG-1", line: 1, dimension: "organizacional",
+    id: "AV-ORG-1", line: 1, dimension: "organizacional", d7: "D1",
+    perception: 3, evidence: { d: 2, i: 0, k: 0 },
     name: "Política institucional de educación digital",
     desc: "Existencia y vigencia de una política o lineamiento institucional que defina la educación digital, sus modalidades y su gobierno.",
     frame: "CNA", value: 2, target: 4, ownerId: "R01",
@@ -50,7 +59,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Sancionar la política de educación digital en Consejo Superior antes de radicar programas virtuales (iniciativa i10).",
   },
   {
-    id: "AV-ORG-2", line: 1, dimension: "organizacional",
+    id: "AV-ORG-2", line: 1, dimension: "organizacional", d7: "D1",
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Gestión de registros calificados para nuevas modalidades",
     desc: "Capacidad institucional para tramitar y sostener registros calificados en modalidad virtual e híbrida según las condiciones del Decreto 1330 de 2019.",
     frame: "Decreto 1330", value: 2, target: 4, ownerId: "R09",
@@ -59,7 +69,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Incorporar las condiciones de calidad para virtualidad en el procedimiento de registro y priorizar las renovaciones 2027 como pilotos.",
   },
   {
-    id: "AV-ORG-3", line: 1, dimension: "organizacional",
+    id: "AV-ORG-3", line: 1, dimension: "organizacional", d7: "D1",
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Estructura organizacional para la virtualidad",
     desc: "Existencia de una unidad con mandato, equipo y presupuesto para operar la educación digital (criterio eMM: Organización).",
     frame: "eMM", value: 1, target: 4, ownerId: "R10",
@@ -68,7 +79,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Crear la Unidad de Educación Digital con dependencia de Vicerrectoría Académica y línea directa a Rectoría (iniciativa i11).",
   },
   {
-    id: "AV-ORG-4", line: 1, dimension: "organizacional",
+    id: "AV-ORG-4", line: 1, dimension: "organizacional", d7: "D1",
+    perception: 3, evidence: { d: 2, i: 2, k: 1 },
     name: "Gestión del ciclo de vida del portafolio",
     desc: "Prácticas de creación, seguimiento y cierre de programas con criterios de demanda, sostenibilidad y pertinencia.",
     frame: "CMI", value: 3, target: 4, ownerId: "R03",
@@ -79,7 +91,8 @@ export const VARIABLES: Variable[] = [
 
   // ── misional / pedagógica (celda = 3) ──
   {
-    id: "AV-MIS-1", line: 1, dimension: "misional",
+    id: "AV-MIS-1", line: 1, dimension: "misional", d7: "D2", ai: true,
+    perception: 3, evidence: { d: 2, i: 2, k: 1 },
     name: "Formación y capacitación docente digital",
     desc: "Ruta institucional de desarrollo de competencia digital docente por niveles, con certificación y reconocimiento (marco INTEF).",
     frame: "INTEF", value: 3, target: 4, ownerId: "R01",
@@ -88,7 +101,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Gestionar el acuerdo de reconocimiento en el estatuto docente y programar cohortes fuera de los picos académicos (iniciativa i4).",
   },
   {
-    id: "AV-MIS-2", line: 1, dimension: "misional",
+    id: "AV-MIS-2", line: 1, dimension: "misional", d7: "D3",
+    perception: 5, evidence: { d: 2, i: 2, k: 1 },
     name: "Diseño instruccional estandarizado",
     desc: "Estandarización de diseños por tipo de curso y número de créditos, que permita proyectar esfuerzos, costos y tiempos de producción.",
     frame: "eMM", value: 3, target: 4, ownerId: "R07",
@@ -97,7 +111,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Extender el estándar de aula a un catálogo de diseños instruccionales por tipología (teórico, teórico-práctico, práctico).",
   },
   {
-    id: "AV-MIS-3", line: 1, dimension: "misional",
+    id: "AV-MIS-3", line: 1, dimension: "misional", d7: "D3",
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Lineamientos curriculares para la virtualidad",
     desc: "Adaptación de los lineamientos curriculares institucionales a las modalidades virtual e híbrida (unidades, prerrequisitos, interacción).",
     frame: "CNA", value: 2, target: 4, ownerId: "R01",
@@ -106,7 +121,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Aprobar los lineamientos en el próximo comité curricular ampliado; son prerrequisito del rediseño microcurricular del componente básico (i9).",
   },
   {
-    id: "AV-MIS-4", line: 1, dimension: "misional",
+    id: "AV-MIS-4", line: 1, dimension: "misional", d7: "D3", ai: true,
+    perception: 4, evidence: { d: 3, i: 3, k: 2 },
     name: "Evaluación de aprendizajes en entornos digitales",
     desc: "Prácticas y herramientas de evaluación formativa y sumativa mediadas por plataforma, con integridad académica.",
     frame: "eMM", value: 4, target: 4, ownerId: "R01",
@@ -117,7 +133,8 @@ export const VARIABLES: Variable[] = [
 
   // ── tecnológica (celda = 2) ──
   {
-    id: "AV-TEC-1", line: 1, dimension: "tecnologica",
+    id: "AV-TEC-1", line: 1, dimension: "tecnologica", d7: "D5",
+    perception: 3, evidence: { d: 2, i: 2, k: 1 },
     name: "Plataforma LMS institucional",
     desc: "Disponibilidad, adopción y gestión del sistema de gestión del aprendizaje como núcleo de los recursos tecnológicos para aprender.",
     frame: "eMM", value: 3, target: 4, ownerId: "R04",
@@ -126,7 +143,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Formalizar el rol de administración LMS (2 posiciones) y habilitar ambiente de pruebas para actualizaciones.",
   },
   {
-    id: "AV-TEC-2", line: 1, dimension: "tecnologica",
+    id: "AV-TEC-2", line: 1, dimension: "tecnologica", d7: "D5",
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Capacidad de producción de contenidos",
     desc: "Equipo, estudio y flujo de producción de recursos educativos digitales (video, interactivos, OVA).",
     frame: "eMM", value: 2, target: 4, ownerId: "R07",
@@ -135,7 +153,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Cerrar el concurso de la vacante y definir el modelo de producción (in-house vs. contratado) con cronograma anual.",
   },
   {
-    id: "AV-TEC-3", line: 1, dimension: "tecnologica",
+    id: "AV-TEC-3", line: 1, dimension: "tecnologica", d7: "D5",
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Conectividad y equipos en sedes",
     desc: "Cobertura de red, aulas con equipos funcionales y soporte en Valledupar y Aguachica.",
     frame: "eMM", value: 2, target: 3, ownerId: "R04",
@@ -144,7 +163,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Redundancia de canal en Aguachica antes de abrir los programas virtuales del sur (prerrequisito de i7).",
   },
   {
-    id: "AV-TEC-4", line: 1, dimension: "tecnologica",
+    id: "AV-TEC-4", line: 1, dimension: "tecnologica", d7: "D5", ai: true,
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Licencias de software educativo",
     desc: "Portafolio de licencias (laboratorios virtuales, simuladores, herramientas de autor) y su gestión de renovación.",
     frame: "Decreto 1330", value: 1, target: 3, ownerId: "R04",
@@ -155,7 +175,8 @@ export const VARIABLES: Variable[] = [
 
   // ── datos e información (celda = 2) ──
   {
-    id: "AV-DAT-1", line: 1, dimension: "datos",
+    id: "AV-DAT-1", line: 1, dimension: "datos", d7: "D4", ai: true,
+    perception: 3, evidence: { d: 0, i: 0, k: 0 },
     name: "Analítica de aprendizaje",
     desc: "Capacidad de recolectar y usar datos de actividad de plataforma para intervenir el riesgo académico (learning analytics).",
     frame: "eMM", value: 1, target: 3, ownerId: "R07",
@@ -164,7 +185,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Publicar el tablero de actividad de aulas (acción pendiente de i1) y pilotear alertas de inactividad en el componente básico.",
   },
   {
-    id: "AV-DAT-2", line: 1, dimension: "datos",
+    id: "AV-DAT-2", line: 1, dimension: "datos", d7: "D4",
+    perception: 3, evidence: { d: 2, i: 2, k: 1 },
     name: "Información del portafolio y la oferta",
     desc: "Consistencia y oportunidad de los datos de programas, cupos, matrícula y modalidad que alimentan SNIES y las decisiones de oferta.",
     frame: "Decreto 1330", value: 3, target: 3, ownerId: "R03",
@@ -173,7 +195,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Sostener la práctica y cerrar el 3 % de incompletitud concentrado en educación continua.",
   },
   {
-    id: "AV-DAT-3", line: 1, dimension: "datos",
+    id: "AV-DAT-3", line: 1, dimension: "datos", d7: "D4",
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Trazabilidad del estudiante entre sistemas",
     desc: "Capacidad de seguir al estudiante de la inscripción al grado sin redigitación entre admisiones, registro y LMS.",
     frame: "DAMA-DMBOK", value: 2, target: 3, ownerId: "R04",
@@ -186,7 +209,8 @@ export const VARIABLES: Variable[] = [
 
   // ── organizacional (celda = 2) ──
   {
-    id: "IN-ORG-1", line: 2, dimension: "organizacional",
+    id: "IN-ORG-1", line: 2, dimension: "organizacional", d7: "D1",
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Gobernanza de la investigación digital",
     desc: "Políticas y estructuras que orientan la investigación mediada por tecnología y la agenda de CTeI digital.",
     frame: "CNA", value: 2, target: 3, ownerId: "R02",
@@ -195,7 +219,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Formular el lineamiento de investigación digital como parte del funcionamiento operativo de la función sustantiva.",
   },
   {
-    id: "IN-ORG-2", line: 2, dimension: "organizacional",
+    id: "IN-ORG-2", line: 2, dimension: "organizacional", d7: "D7",
+    perception: 3, evidence: { d: 2, i: 2, k: 1 },
     name: "Semilleros y líneas en educación digital",
     desc: "Existencia de líneas, semilleros y proyectos asociados a la transformación digital educativa.",
     frame: "CNA", value: 3, target: 4, ownerId: "R02",
@@ -204,7 +229,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Presentar al menos un proyecto a la convocatoria interna 2027 y uno a MinCiencias.",
   },
   {
-    id: "IN-ORG-3", line: 2, dimension: "organizacional",
+    id: "IN-ORG-3", line: 2, dimension: "organizacional", d7: "D2",
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Capacidad del talento investigador",
     desc: "Suficiencia y estabilidad del talento humano dedicado a investigación (TCE, formación doctoral, permanencia).",
     frame: "CNA", value: 1, target: 2, ownerId: "R02",
@@ -215,7 +241,8 @@ export const VARIABLES: Variable[] = [
 
   // ── misional (celda = 2) ──
   {
-    id: "IN-MIS-1", line: 2, dimension: "misional",
+    id: "IN-MIS-1", line: 2, dimension: "misional", d7: "D4",
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Prácticas de ciencia abierta",
     desc: "Adopción de acceso abierto, datos abiertos y licenciamiento en la producción académica.",
     frame: "CNA", value: 2, target: 4, ownerId: "R05",
@@ -224,7 +251,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Aprobar la política de acceso abierto (hito de i3, mar-2027) y hacer el depósito condición del apoyo a publicación.",
   },
   {
-    id: "IN-MIS-2", line: 2, dimension: "misional",
+    id: "IN-MIS-2", line: 2, dimension: "misional", d7: "D3",
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Investigación formativa en entornos virtuales",
     desc: "Promoción de la investigación formativa a través de entornos virtuales de aprendizaje en pregrado.",
     frame: "eMM", value: 2, target: 4, ownerId: "R02",
@@ -233,7 +261,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Incluir un módulo de investigación formativa en los cursos transversales virtualizados (i9).",
   },
   {
-    id: "IN-MIS-3", line: 2, dimension: "misional",
+    id: "IN-MIS-3", line: 2, dimension: "misional", d7: "D7",
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Divulgación científica mediada por TIC",
     desc: "Eventos, comunidades y canales digitales de divulgación del conocimiento producido.",
     frame: "CMI", value: 2, target: 4, ownerId: "R02",
@@ -244,7 +273,8 @@ export const VARIABLES: Variable[] = [
 
   // ── tecnológica (celda = 3) ──
   {
-    id: "IN-TEC-1", line: 2, dimension: "tecnologica",
+    id: "IN-TEC-1", line: 2, dimension: "tecnologica", d7: "D5",
+    perception: 3, evidence: { d: 2, i: 2, k: 1 },
     name: "Plataforma de gestión de la investigación",
     desc: "Sistema para gestionar convocatorias, proyectos, productos y grupos.",
     frame: "eMM", value: 3, target: 4, ownerId: "R02",
@@ -253,7 +283,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Habilitar el módulo de productos e integrarlo al flujo de actualización CvLAC.",
   },
   {
-    id: "IN-TEC-2", line: 2, dimension: "tecnologica",
+    id: "IN-TEC-2", line: 2, dimension: "tecnologica", d7: "D5",
+    perception: 2, evidence: { d: 3, i: 3, k: 2 },
     name: "Repositorio institucional",
     desc: "Repositorio en producción con estándares de metadatos e interoperabilidad (OAI-PMH).",
     frame: "DAMA-DMBOK", value: 4, target: 4, ownerId: "R05",
@@ -262,7 +293,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Activar la cosecha hacia Google Scholar y La Referencia (acción final de i3).",
   },
   {
-    id: "IN-TEC-3", line: 2, dimension: "tecnologica",
+    id: "IN-TEC-3", line: 2, dimension: "tecnologica", d7: "D4", ai: true,
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Herramientas de análisis y bibliometría",
     desc: "Acceso y uso de herramientas de análisis bibliométrico y vigilancia tecnológica.",
     frame: "CMI", value: 2, target: 4, ownerId: "R05",
@@ -273,7 +305,8 @@ export const VARIABLES: Variable[] = [
 
   // ── datos (celda = 1) ──
   {
-    id: "IN-DAT-1", line: 2, dimension: "datos",
+    id: "IN-DAT-1", line: 2, dimension: "datos", d7: "D4",
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Actualización de CvLAC / GrupLAC",
     desc: "Vigencia de las hojas de vida y grupos en las plataformas de MinCiencias, base de la medición nacional.",
     frame: "CNA", value: 1, target: 3, ownerId: "R02",
@@ -282,7 +315,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Jornadas de actualización asistida por facultad antes de la convocatoria de medición de grupos.",
   },
   {
-    id: "IN-DAT-2", line: 2, dimension: "datos",
+    id: "IN-DAT-2", line: 2, dimension: "datos", d7: "D5",
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Interoperabilidad producción ↔ repositorio",
     desc: "Flujo automático entre el registro de productos, el repositorio y los perfiles de investigador.",
     frame: "DAMA-DMBOK", value: 1, target: 3, ownerId: "R05",
@@ -291,7 +325,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Incluir el flujo investigación→repositorio en el bus de interoperabilidad (i5).",
   },
   {
-    id: "IN-DAT-3", line: 2, dimension: "datos",
+    id: "IN-DAT-3", line: 2, dimension: "datos", d7: "D4", ai: true,
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Métricas de visibilidad científica",
     desc: "Medición sistemática de citación, altmetría y posicionamiento de la producción institucional.",
     frame: "CMI", value: 1, target: 3, ownerId: "R03",
@@ -304,7 +339,8 @@ export const VARIABLES: Variable[] = [
 
   // ── organizacional (celda = 3) ──
   {
-    id: "EX-ORG-1", line: 3, dimension: "organizacional",
+    id: "EX-ORG-1", line: 3, dimension: "organizacional", d7: "D3",
+    perception: 3, evidence: { d: 2, i: 2, k: 1 },
     name: "Gestión del portafolio de convenios",
     desc: "Ciclo de vida de convenios de extensión: suscripción, ejecución verificable y evaluación de resultados.",
     frame: "CMI", value: 3, target: 4, ownerId: "R08",
@@ -313,7 +349,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Asociar cada convenio a indicadores de resultado y reportarlo trimestralmente en la plataforma.",
   },
   {
-    id: "EX-ORG-2", line: 3, dimension: "organizacional",
+    id: "EX-ORG-2", line: 3, dimension: "organizacional", d7: "D1",
+    perception: 3, evidence: { d: 2, i: 2, k: 1 },
     name: "Procesos de autoevaluación institucional",
     desc: "Madurez del ciclo de autoevaluación (CNA): periodicidad, participación, planes de mejoramiento con seguimiento.",
     frame: "CNA", value: 3, target: 4, ownerId: "R09",
@@ -322,7 +359,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Cargar los planes de mejoramiento como iniciativas de la PGTD para heredar seguimiento, presupuesto y factores de éxito.",
   },
   {
-    id: "EX-ORG-3", line: 3, dimension: "organizacional",
+    id: "EX-ORG-3", line: 3, dimension: "organizacional", d7: "D6",
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Relacionamiento con egresados",
     desc: "Estrategia y canales de vínculo con egresados: bolsa de empleo, formación continua, participación institucional.",
     frame: "CNA", value: 2, target: 4, ownerId: "R08",
@@ -331,7 +369,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Campaña de actualización de datos ligada a beneficios (carné, descuentos en posgrados) antes del CRM (i13).",
   },
   {
-    id: "EX-ORG-4", line: 3, dimension: "organizacional",
+    id: "EX-ORG-4", line: 3, dimension: "organizacional", d7: "D7",
+    perception: 4, evidence: { d: 3, i: 3, k: 2 },
     name: "Articulación con la educación media y el territorio",
     desc: "Programas de articulación con colegios y actores territoriales como canal de cobertura.",
     frame: "CMI", value: 4, target: 4, ownerId: "R08",
@@ -342,7 +381,8 @@ export const VARIABLES: Variable[] = [
 
   // ── misional (celda = 2) ──
   {
-    id: "EX-MIS-1", line: 3, dimension: "misional",
+    id: "EX-MIS-1", line: 3, dimension: "misional", d7: "D3",
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Oferta de educación continua digital",
     desc: "Portafolio de cursos, diplomados y certificaciones en modalidad virtual o híbrida.",
     frame: "CMI", value: 2, target: 3, ownerId: "R08",
@@ -351,7 +391,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Lanzar un catálogo digital con 5 diplomados híbridos y matrícula en línea (ingresos: KPI SO-01).",
   },
   {
-    id: "EX-MIS-2", line: 3, dimension: "misional",
+    id: "EX-MIS-2", line: 3, dimension: "misional", d7: "D6",
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Proyección social mediada por TIC",
     desc: "Extensión de los servicios de proyección social (consultorios, unidades de atención) a través de canales digitales.",
     frame: "CMI", value: 2, target: 3, ownerId: "R08",
@@ -360,7 +401,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Habilitar atención virtual de consultorios con agenda en línea, priorizando Aguachica.",
   },
   {
-    id: "EX-MIS-3", line: 3, dimension: "misional",
+    id: "EX-MIS-3", line: 3, dimension: "misional", d7: "D7",
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Emprendimiento vía canales digitales",
     desc: "Programas de emprendimiento e innovación soportados en plataformas y comunidades digitales.",
     frame: "CMI", value: 2, target: 3, ownerId: "R08",
@@ -371,7 +413,8 @@ export const VARIABLES: Variable[] = [
 
   // ── tecnológica (celda = 2) ──
   {
-    id: "EX-TEC-1", line: 3, dimension: "tecnologica",
+    id: "EX-TEC-1", line: 3, dimension: "tecnologica", d7: "D6", ai: true,
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Canales de atención al interesado y estudiante",
     desc: "Sistematización de los momentos de contacto: formularios, chat, línea de WhatsApp, punto de atención virtual.",
     frame: "eMM", value: 2, target: 4, ownerId: "R06",
@@ -380,7 +423,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Publicar los ANS y abrir la mesa de ayuda (hito de i8, mar-2027).",
   },
   {
-    id: "EX-TEC-2", line: 3, dimension: "tecnologica",
+    id: "EX-TEC-2", line: 3, dimension: "tecnologica", d7: "D5",
+    perception: 3, evidence: { d: 2, i: 2, k: 1 },
     name: "Portal institucional y presencia web",
     desc: "El sitio web como punto único de acceso a servicios académicos y de extensión.",
     frame: "eMM", value: 3, target: 3, ownerId: "R04",
@@ -389,7 +433,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Priorizar los 10 trámites más demandados para virtualización end-to-end.",
   },
   {
-    id: "EX-TEC-3", line: 3, dimension: "tecnologica",
+    id: "EX-TEC-3", line: 3, dimension: "tecnologica", d7: "D6",
+    perception: 1, evidence: { d: 1, i: 1, k: 0 },
     name: "Mesa de ayuda y soporte al usuario",
     desc: "Mesa de servicio con base de conocimiento para estudiantes y docentes-tutores.",
     frame: "eMM", value: 1, target: 3, ownerId: "R06",
@@ -400,7 +445,8 @@ export const VARIABLES: Variable[] = [
 
   // ── datos (celda = 1) ──
   {
-    id: "EX-DAT-1", line: 3, dimension: "datos",
+    id: "EX-DAT-1", line: 3, dimension: "datos", d7: "D4",
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Base de datos de egresados",
     desc: "Calidad, cobertura y actualización de la información de egresados.",
     frame: "DAMA-DMBOK", value: 1, target: 3, ownerId: "R08",
@@ -409,7 +455,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Designar dueño de dato de egresados en el programa de gobierno (i2) y meta de cobertura 70 %.",
   },
   {
-    id: "EX-DAT-2", line: 3, dimension: "datos",
+    id: "EX-DAT-2", line: 3, dimension: "datos", d7: "D4", ai: true,
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Línea base de indicadores de rankings",
     desc: "Datos internos organizados según los indicadores de Sapiens, Scimago, THE Impact y QS.",
     frame: "CMI", value: 1, target: 3, ownerId: "R03",
@@ -418,7 +465,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Completar la matriz y automatizar el corte trimestral en el observatorio (i6).",
   },
   {
-    id: "EX-DAT-3", line: 3, dimension: "datos",
+    id: "EX-DAT-3", line: 3, dimension: "datos", d7: "D4",
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Seguimiento de convenios con datos",
     desc: "Registro estructurado de ejecución, beneficiarios y resultados por convenio.",
     frame: "CMI", value: 1, target: 3, ownerId: "R08",
@@ -431,7 +479,8 @@ export const VARIABLES: Variable[] = [
 
   // ── organizacional (celda = 2) ──
   {
-    id: "AR-ORG-1", line: 4, dimension: "organizacional",
+    id: "AR-ORG-1", line: 4, dimension: "organizacional", d7: "D1", ai: true,
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Gobierno de TI",
     desc: "Comité de TI con mandato sobre portafolio, arquitectura y seguridad; decisiones documentadas.",
     frame: "TOGAF 10", value: 2, target: 4, ownerId: "R04",
@@ -440,7 +489,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Reglamentar el comité con calendario, quórum y revisión de arquitectura previa a toda adquisición.",
   },
   {
-    id: "AR-ORG-2", line: 4, dimension: "organizacional",
+    id: "AR-ORG-2", line: 4, dimension: "organizacional", d7: "D5",
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Arquitectura empresarial documentada",
     desc: "Existencia de la arquitectura institucional (negocio, información, aplicaciones, tecnología) bajo un método formal (TOGAF ADM).",
     frame: "TOGAF 10", value: 1, target: 4, ownerId: "R03",
@@ -449,7 +499,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Ejecutar las fases Preliminar, Visión y Negocio del ADM durante la Fase 3 de la consultoría (entregable comprometido).",
   },
   {
-    id: "AR-ORG-3", line: 4, dimension: "organizacional",
+    id: "AR-ORG-3", line: 4, dimension: "organizacional", d7: "D1",
+    perception: 3, evidence: { d: 2, i: 2, k: 1 },
     name: "Gestión del portafolio de proyectos de TI",
     desc: "Priorización, seguimiento y cierre de proyectos tecnológicos con criterios de valor.",
     frame: "CMI", value: 3, target: 4, ownerId: "R04",
@@ -460,7 +511,8 @@ export const VARIABLES: Variable[] = [
 
   // ── misional / procesos (celda = 1) ──
   {
-    id: "AR-MIS-1", line: 4, dimension: "misional",
+    id: "AR-MIS-1", line: 4, dimension: "misional", d7: "D3",
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Caracterización de procesos críticos",
     desc: "Procesos del mapa institucional con caracterización vigente en el sistema de gestión de calidad.",
     frame: "CNA", value: 1, target: 3, ownerId: "R03",
@@ -469,7 +521,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Aprobar los 8 procesos de virtualidad y sostener el ritmo de caracterización (KPI AR-01: meta 80 %).",
   },
   {
-    id: "AR-MIS-2", line: 4, dimension: "misional",
+    id: "AR-MIS-2", line: 4, dimension: "misional", d7: "D3",
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Procesos de la virtualidad en el sistema de calidad",
     desc: "Evolución del SGC para cubrir la operación de asignaturas y programas virtuales (línea de apoyo + despliegue).",
     frame: "CNA", value: 1, target: 3, ownerId: "R03",
@@ -478,7 +531,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Incorporar los 8 procesos de línea de apoyo y los 16 de despliegue (patrón del modelo USCO) antes de la primera cohorte virtual.",
   },
   {
-    id: "AR-MIS-3", line: 4, dimension: "misional",
+    id: "AR-MIS-3", line: 4, dimension: "misional", d7: "D2",
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Gestión del cambio organizacional",
     desc: "Prácticas de gestión del cambio para la adopción de nuevos procesos y sistemas.",
     frame: "CMI", value: 1, target: 3, ownerId: "R03",
@@ -489,7 +543,8 @@ export const VARIABLES: Variable[] = [
 
   // ── tecnológica (celda = 2) ──
   {
-    id: "AR-TEC-1", line: 4, dimension: "tecnologica",
+    id: "AR-TEC-1", line: 4, dimension: "tecnologica", d7: "D5",
+    perception: 3, evidence: { d: 2, i: 2, k: 1 },
     name: "Inventario y obsolescencia de sistemas",
     desc: "Catálogo de sistemas de información con estado, soporte, versiones y riesgo de obsolescencia.",
     frame: "TOGAF 10", value: 3, target: 4, ownerId: "R04",
@@ -498,7 +553,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Plan de reemplazo del sistema financiero en la vigencia 2028; congelar integraciones nuevas sobre sistemas en riesgo.",
   },
   {
-    id: "AR-TEC-2", line: 4, dimension: "tecnologica",
+    id: "AR-TEC-2", line: 4, dimension: "tecnologica", d7: "D5",
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Interoperabilidad entre sistemas",
     desc: "Intercambio de datos por servicios entre los sistemas críticos, sin archivos planos ni redigitación.",
     frame: "TOGAF 10", value: 1, target: 4, ownerId: "R04",
@@ -507,7 +563,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Resolver la financiación del bus (factor en racha roja) o priorizar 3 integraciones puntuales de alto valor mientras tanto.",
   },
   {
-    id: "AR-TEC-3", line: 4, dimension: "tecnologica",
+    id: "AR-TEC-3", line: 4, dimension: "tecnologica", d7: "D5", ai: true,
+    perception: 2, evidence: { d: 1, i: 1, k: 0 },
     name: "Seguridad de la información",
     desc: "Controles de seguridad: gestión de accesos, respaldo, continuidad y tratamiento de datos personales.",
     frame: "ISO 27001", value: 2, target: 4, ownerId: "R04",
@@ -518,7 +575,8 @@ export const VARIABLES: Variable[] = [
 
   // ── datos (celda = 1) ──
   {
-    id: "AR-DAT-1", line: 4, dimension: "datos",
+    id: "AR-DAT-1", line: 4, dimension: "datos", d7: "D4", ai: true,
+    perception: 2, evidence: { d: 2, i: 1, k: 0 },
     name: "Gobierno de datos institucional",
     desc: "Comité, catálogo de datos maestros, dueños designados y reglas de calidad (DAMA-DMBOK).",
     frame: "DAMA-DMBOK", value: 1, target: 4, ownerId: "R03",
@@ -527,7 +585,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Asignar descarga horaria a los dueños de dato en la programación académica 2027-2.",
   },
   {
-    id: "AR-DAT-2", line: 4, dimension: "datos",
+    id: "AR-DAT-2", line: 4, dimension: "datos", d7: "D4",
+    perception: 3, evidence: { d: 1, i: 1, k: 0 },
     name: "Calidad de los datos SNIES",
     desc: "Consistencia del reporte oficial: matrícula, programas, docentes y graduados sin inconsistencias.",
     frame: "DAMA-DMBOK", value: 1, target: 3, ownerId: "R03",
@@ -536,7 +595,8 @@ export const VARIABLES: Variable[] = [
     recomendacion: "Plan de remediación de las 12 inconsistencias con responsable por entidad, antes del próximo corte de reporte.",
   },
   {
-    id: "AR-DAT-3", line: 4, dimension: "datos",
+    id: "AR-DAT-3", line: 4, dimension: "datos", d7: "D4", ai: true,
+    perception: 1, evidence: { d: 0, i: 0, k: 0 },
     name: "Analítica institucional para decisiones",
     desc: "Tableros de decisión para directivos con datos integrados (matrícula, deserción, finanzas, desempeño).",
     frame: "CMI", value: 1, target: 3, ownerId: "R03",

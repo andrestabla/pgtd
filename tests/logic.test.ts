@@ -109,6 +109,7 @@ const mkIni = (over: Partial<InitiativeFull>): InitiativeFull => ({
   id: "t1", line: 1, subsistema: "Formación", cmi: "OE-01", name: "Test",
   objetivo: "", horizon: "CORTO", impact: 3, feasibility: 3, status: "EN_CURSO",
   start: "2026-T3", end: "2027-T4", ownerId: "R01", metaResultado: "",
+  urgency: 3, dependency: 3,
   budgetPlanned: 100, budgetCommitted: 0, budgetExecuted: 50, progress: 50,
   capability: "c1", kpi: "AV-01", actions: [], log: [],
   nextMilestone: { date: "2027-06-01", text: "" },
@@ -261,5 +262,97 @@ test("registros calificados: cobertura total del portafolio y estados coherentes
   for (const r of REG_CALIFICADOS.filter((x) => x.estado === "POR_VENCER")) {
     const [y, m] = r.vence.split("-").map(Number);
     assert.ok(y * 12 + (m - 1) - (2027 * 12 + 2) <= 18, r.code);
+  }
+});
+
+/* ─── motor AlgoritmoT-IES ─── */
+
+import {
+  P as iesP, E as iesE, S as iesS, gapPE, gapReading, levelOf, IES_LEVELS,
+  lineIndex, iies, IIES_WEIGHTS, dimensionIndex, evidenceCoverage,
+  aiqIES, SAFEGUARDS, priorityOf, priorityRanking,
+} from "../src/lib/ies";
+import type { Variable } from "../src/data/instrument";
+
+const mkVar = (over: Partial<Variable>): Variable => ({
+  id: "T-1", line: 1, dimension: "organizacional", d7: "D1",
+  name: "t", desc: "t", frame: "CMI", value: 3, target: 4,
+  perception: 3, evidence: { d: 2, i: 2, k: 1 },
+  ownerId: "R01", evidenceIds: [], hallazgo: "x".repeat(50), recomendacion: "y".repeat(40),
+  ...over,
+});
+
+test("IES: fórmulas P, E y S según el informe", () => {
+  const v = mkVar({ perception: 3, evidence: { d: 2, i: 2, k: 1 } });
+  assert.equal(iesP(v), 50);                       // (3-1)/4·100
+  assert.ok(Math.abs(iesE(v) - 40) < 0.001);       // 0.25·50 + 0.35·50 + 0.40·25
+  assert.ok(Math.abs(iesS(v) - 44) < 0.001);       // 0.4·50 + 0.6·40
+});
+
+test("IES: brecha percepción-evidencia y su lectura", () => {
+  const sobre = mkVar({ perception: 4, evidence: { d: 1, i: 0, k: 0 } }); // P=75, E=6.25
+  assert.equal(gapReading(sobre), "SOBREESTIMACION");
+  const invisible = mkVar({ perception: 2, evidence: { d: 3, i: 3, k: 2 } }); // P=25, E=65
+  assert.equal(gapReading(invisible), "PRACTICA_INVISIBLE");
+  assert.ok(gapPE(sobre) > 20 && gapPE(invisible) < -20);
+});
+
+test("IES: niveles 0-100 con los rangos del informe", () => {
+  assert.equal(levelOf(10).name, "Inicial");
+  assert.equal(levelOf(20).name, "Emergente");
+  assert.equal(levelOf(45).name, "Gestionado");
+  assert.equal(levelOf(60).name, "Integrado");
+  assert.equal(levelOf(85).name, "Transformador");
+  assert.equal(IES_LEVELS.length, 5);
+});
+
+test("IES: IIES pondera 30/25/20/25 y cae en un nivel plausible", () => {
+  const w = Object.values(IIES_WEIGHTS).reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(w - 1) < 1e-9);
+  const manual = 0.30 * lineIndex(1) + 0.25 * lineIndex(2) + 0.20 * lineIndex(3) + 0.25 * lineIndex(4);
+  assert.ok(Math.abs(iies() - manual) < 1e-9);
+  // instrumento actual: institución emergente (coherente con madurez 1.94/5)
+  assert.equal(levelOf(iies()).name, "Emergente");
+});
+
+test("IES: las 7 dimensiones transversales tienen índice calculable", () => {
+  for (const d of ["D1", "D2", "D3", "D4", "D5", "D6", "D7"] as const) {
+    const idx = dimensionIndex(d);
+    assert.ok(idx >= 0 && idx <= 100, d);
+  }
+});
+
+test("IES: cobertura de evidencia entre 0 y 100 y coherente con el criterio", () => {
+  const c = evidenceCoverage();
+  assert.ok(c > 0 && c < 100);
+});
+
+test("IES: AIQ capado por la salvaguarda en falla", () => {
+  const a = aiqIES();
+  assert.ok(SAFEGUARDS.some((s) => s.status === "FALLA"));
+  assert.equal(a.cap, 59);
+  assert.ok(a.capped <= 59);
+  const wsum = a.components.reduce((x, c) => x + c.weight, 0);
+  assert.ok(Math.abs(wsum - 1) < 1e-9);
+});
+
+test("IES: prioridad compuesta pondera según el informe y ordena el ranking", () => {
+  const i1 = INITIATIVES_FULL.find((i) => i.id === "i1")!;
+  const p = priorityOf(i1);
+  const wsum = p.criteria.reduce((a, c) => a + c.weight, 0);
+  assert.ok(Math.abs(wsum - 1) < 1e-9);
+  assert.ok(p.score >= 1 && p.score <= 5);
+  const rank = priorityRanking();
+  assert.equal(rank.length, INITIATIVES_FULL.length);
+  for (let i = 1; i < rank.length; i++) assert.ok(rank[i].score <= rank[i - 1].score);
+});
+
+test("IES: toda variable tiene d7, percepción 1-5 y evidencia 0-4", () => {
+  for (const v of VARIABLES) {
+    assert.ok(["D1","D2","D3","D4","D5","D6","D7"].includes(v.d7), v.id);
+    assert.ok(v.perception >= 1 && v.perception <= 5, v.id);
+    for (const c of [v.evidence.d, v.evidence.i, v.evidence.k]) {
+      assert.ok(c >= 0 && c <= 4, v.id);
+    }
   }
 });

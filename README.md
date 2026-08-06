@@ -60,6 +60,10 @@ de modo que no hay divergencia entre ambos.
 
 ```
 docs/marco-conceptual.md      # traza literatura → reglas (9 artículos procesados)
+src/lib/ies.ts                # metodología AlgoritmoT-IES (deep-research-report):
+                              #   S = 0,40·P + 0,60·E; brecha P−E; niveles
+                              #   0–100; IIES 30/25/20/25; matriz 4×7; AIQ-IES
+                              #   con salvaguardas; cobertura; prioridad 6-criterios
 src/lib/logic.ts              # reglas puras: salud de KPI (semáforo, rezago de
                               #   captura, proyección lineal a meta), riesgo
                               #   compuesto de iniciativas (factores con racha,

@@ -135,6 +135,39 @@ Referencia madre ya procesada (ver commit anterior): CMI de 5 perspectivas y
 resultado, evaluación eMM con evidencia, factores de éxito por capacidad,
 inversión anualizada.
 
+### 1.11 AlgoritmoT — *Propuesta metodológica e instrumental para AlgoritmoT-IES* (deep-research-report)
+
+**Aporte central.** Formalización de la metodología propia: matriz **4 líneas
+misionales × 7 dimensiones transversales** (D1 estrategia/gobierno/calidad,
+D2 talento, D3 procesos, D4 datos, D5 infraestructura, D6 experiencia/
+inclusión, D7 innovación/impacto), con:
+
+- **Puntuación verificada** S = 0,40·P + 0,60·E, donde P es percepción Likert
+  normalizada y E = 0,25·Documentación + 0,35·Implementación + 0,40·Indicadores
+  (cada componente 0–4). Una política aprobada pero no usada puntúa distinto
+  de una práctica medida y mejorada.
+- **Brecha percepción−evidencia** Δ = P − E: |Δ| > 20 es hallazgo de gestión
+  (sobreestimación o práctica invisible).
+- **Cinco niveles 0–100**: Inicial (0–19), Emergente (20–39), Gestionado
+  (40–59), Integrado (60–79), Transformador (80–100).
+- **Índices**: por línea misional, por dimensión transversal, e institucional
+  IIES = 0,30·Formación + 0,25·Investigación + 0,20·Extensión + 0,25·Gestión.
+- **AIQ-IES** de 6 componentes con **salvaguardas** que capan el puntaje (59 o
+  39) ante fallas críticas de privacidad, ética, supervisión humana o
+  integridad — el promedio no oculta riesgos.
+- **Cobertura de evidencia** reportada junto al puntaje.
+- **Priorización compuesta**: 0,30·Impacto + 0,20·Urgencia + 0,15·Riesgo +
+  0,15·Alineación + 0,10·Factibilidad + 0,10·Dependencia.
+- Plan de validación psicométrica (CVI, Aiken, EFA/CFA ordinal, omega,
+  invariancia) con umbrales como guías, no reglas mecánicas.
+
+**Implicaciones PGTD.** Es la metodología madre del instrumento. Implementada
+en `src/lib/ies.ts` como capa de puntuación sobre las 52 variables (cada una
+anotada con `d7`, `perception`, `evidence{d,i,k}` y `ai`); pestaña «Índices
+IES» en M1; ranking de prioridad compuesta en M5. La percepción se reporta
+como provisional hasta auditoría, y los pesos por ítem son iguales hasta que
+exista fundamento psicométrico — ambas cosas por mandato del informe.
+
 ---
 
 ## 2 · Síntesis: qué debe saber hacer la plataforma
@@ -151,5 +184,11 @@ inversión anualizada.
 | Equidad territorial (1.7, 1.8) | Cobertura municipal como dato de primera clase en benchmark |
 | Proyección sobre serie, no foto (1.1, 1.5) | Proyección lineal del KPI a fecha meta: ¿al ritmo actual llega? |
 
-Estas nueve reglas están implementadas en `src/lib/logic.ts` y expuestas por
-`/api/td/*`; el panel las consume para generar las alertas.
+| La percepción no es madurez: S = 0,40·P + 0,60·E (1.11) | `ies.ts`: puntuación verificada por variable; percepción etiquetada provisional |
+| |Δ| > 20 entre percepción y evidencia es hallazgo (1.11) | Tarjeta de brechas P−E con lectura sobreestimación / práctica invisible |
+| Las salvaguardas capan el promedio (1.11) | AIQ-IES ≤ 59 mientras no exista inventario de sistemas de IA |
+| El puntaje sin cobertura de evidencia engaña (1.11) | IIES y cobertura se muestran siempre juntos |
+| La prioridad es compuesta, no solo impacto×factibilidad (1.11) | Ranking 6 criterios en M5 con desglose visible |
+
+Estas reglas están implementadas en `src/lib/logic.ts` y `src/lib/ies.ts`,
+expuestas por `/api/td/*`; el panel y los módulos las consumen.

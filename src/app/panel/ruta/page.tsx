@@ -6,6 +6,7 @@ import { useState } from "react";
 import { PageHeader, Card, CardHeader, StatusChip } from "@/components/ui";
 import { GanttChart, PriorityMatrix } from "@/components/charts";
 import { INITIATIVES, LINES, fmtCOP } from "@/data/demo";
+import { priorityRanking } from "@/lib/ies";
 
 export default function RutaPage() {
   const [sel, setSel] = useState<string | null>(null);
@@ -47,6 +48,54 @@ export default function RutaPage() {
           </div>
         </Card>
       </div>
+
+      {/* ranking de prioridad compuesta (AlgoritmoT-IES) */}
+      <Card className="rise rise-2 mb-5">
+        <CardHeader title="Prioridad compuesta del portafolio"
+          sub="0,30·Impacto + 0,20·Urgencia + 0,15·Riesgo + 0,15·Alineación + 0,10·Factibilidad + 0,10·Dependencia (criterios 1–5)" />
+        <div className="overflow-x-auto px-3 pb-4">
+          <table className="w-full min-w-[760px] text-[12px]">
+            <thead>
+              <tr className="border-b border-line-strong">
+                <th className="label px-3 pb-2 text-left !text-[8.5px]">#</th>
+                <th className="label px-3 pb-2 text-left !text-[8.5px]">Iniciativa</th>
+                <th className="label px-3 pb-2 text-right !text-[8.5px]">Prioridad</th>
+                <th className="label px-3 pb-2 text-left !text-[8.5px]">Desglose</th>
+              </tr>
+            </thead>
+            <tbody>
+              {priorityRanking().map((p, idx) => (
+                <tr key={p.id} className={`border-b border-line last:border-0 ${idx < 3 ? "bg-cyan-wash/40" : ""}`}>
+                  <td className="num px-3 py-2 font-extrabold text-faint">{idx + 1}</td>
+                  <td className="px-3 py-2">
+                    <button onClick={() => setSel(p.id)} className="text-left font-semibold text-ink hover:text-cyan-deep">
+                      {p.name}
+                    </button>
+                  </td>
+                  <td className="num px-3 py-2 text-right text-[14px] font-extrabold"
+                    style={{ color: p.score >= 4 ? "var(--cyan-deep)" : "var(--ink)" }}>
+                    {p.score.toFixed(2)}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {p.criteria.map((c) => (
+                        <span key={c.key} className="num rounded bg-surface-2 px-1.5 py-0.5 text-[9.5px] text-muted"
+                          title={`${c.label} · peso ${Math.round(c.weight * 100)} %`}>
+                          {c.label.split(" ")[0].slice(0, 6)} {c.value}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="border-t border-line px-5 py-2.5 text-[10.5px] text-faint">
+          Riesgo derivado del motor de seguimiento; alineación derivada de la salud del objetivo CMI al que sirve.
+          La factibilidad pesa poco a propósito: una acción fácil pero irrelevante no debe desplazar a una estratégica.
+        </div>
+      </Card>
 
       {/* detalle de iniciativa */}
       {ini && (
