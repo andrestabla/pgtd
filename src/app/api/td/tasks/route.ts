@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { PEOPLE } from "@/data/proyectos";
-import { getTasks, getAudit, getEvidenceStatus, hydrateFromDb } from "@/server/store";
+import {
+  getTasks, getAudit, getEvidenceStatus, hydrateFromDb,
+  getComments, getUploads, deviationDays, portfolioSlippage, getBaseline,
+} from "@/server/store";
 import { taskAlerts, workload, portfolioTaskStats } from "@/lib/proyectos";
 import { can } from "@/lib/permissions";
 import { INITIATIVES_FULL, EVIDENCE_CATALOG } from "@/data/cmi";
@@ -27,5 +30,10 @@ export async function GET() {
     editable,
     canVerifyEvidence: can(user, "verify_evidence"),
     evidenceStatus: Object.fromEntries(EVIDENCE_CATALOG.map((e) => [e.id, getEvidenceStatus(e.id)])),
+    comments: getComments(),
+    uploads: getUploads(),
+    slippage: portfolioSlippage(),
+    deviations: Object.fromEntries(getTasks().map((t) => [t.id, deviationDays(t)])),
+    baselines: Object.fromEntries(getTasks().map((t) => [t.id, getBaseline(t.id)])),
   });
 }

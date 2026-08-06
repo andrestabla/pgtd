@@ -29,10 +29,36 @@ export type AuditEntry = {
   change: string;           // descripción legible
 };
 
+export type TaskComment = {
+  id: number;
+  taskId: string;
+  author: string;
+  role: string;
+  text: string;
+  at: string;               // ISO
+};
+
+export type UploadedEvidence = {
+  id: string;               // EV-U01…
+  taskId: string;
+  title: string;
+  kind: string;             // Documento | Acta | Informe | Sistema | Otro
+  fileName: string;
+  filePath: string;         // ruta local (var/uploads); en producción, clave R2
+  size: number;
+  mime: string;
+  uploadedBy: string;
+  date: string;             // ISO fecha
+  status: EvidenceStatus;
+};
+
 const g = globalThis as unknown as {
   __pgtdTasks?: Task[];
   __pgtdEvidence?: Map<string, EvidenceStatus>;
   __pgtdAudit?: AuditEntry[];
+  __pgtdComments?: TaskComment[];
+  __pgtdUploads?: UploadedEvidence[];
+  __pgtdBaseline?: Map<string, { start: string; due: string }>;
   __pgtdHydrated?: boolean;
 };
 
@@ -42,8 +68,18 @@ if (!g.__pgtdEvidence) {
   g.__pgtdEvidence = new Map(EVIDENCE_CATALOG.map((e) => [e.id, e.status]));
 }
 if (!g.__pgtdAudit) g.__pgtdAudit = [];
+if (!g.__pgtdComments) g.__pgtdComments = [];
+if (!g.__pgtdUploads) g.__pgtdUploads = [];
+// línea base del cronograma: las fechas del plan aprobado (seed) se congelan;
+// las reprogramaciones mueven las vigentes y el deslizamiento se mide contra esta.
+if (!g.__pgtdBaseline) {
+  g.__pgtdBaseline = new Map(TASKS_SEED.map((t) => [t.id, { start: t.start, due: t.due }]));
+}
 
 const tasks = () => g.__pgtdTasks!;
+const comments = () => g.__pgtdComments!;
+const uploads = () => g.__pgtdUploads!;
+const baselines = () => g.__pgtdBaseline!;
 const evidenceStatus = () => g.__pgtdEvidence!;
 const auditLog = () => g.__pgtdAudit!;
 
@@ -91,6 +127,35 @@ export const getEvidenceStatus = (id: string): EvidenceStatus =>
   evidenceStatus().get(id) ?? "PENDIENTE";
 export const getAudit = (entityId?: string): AuditEntry[] =>
   entityId ? auditLog().filter((a) => a.entityId === entityId) : auditLog();
+
+export const getComments = (taskId?: string): TaskComment[] =>
+  taskId ? comments().filter((c) => c.taskId === taskId) : comments();
+
+export const getUploads = (taskId?: string): UploadedEvidence[] =>
+  taskId ? uploads().filter((u) => u.taskId === taskId) : uploads();
+
+export const getUploadById = (id: string) => uploads().find((u) => u.id === id) ?? null;
+
+export const getBaseline = (taskId: string) => baselines().get(taskId) ?? null;
+
+/** Deslizamiento en días de la fecha compromiso frente a la línea base. */
+export const deviationDays = (t: Task): number => {
+  const base = baselines().get(t.id);
+  if (!base) return 0;
+  return Math.round(
+    (new Date(t.due).getTime() - new Date(base.due).getTime()) / 86_400_000,
+  );
+};
+
+/** Deslizamiento acumulado del portafolio (solo positivos: días perdidos). */
+export const portfolioSlippage = () => {
+  const shifted = tasks().map((t) => ({ t, d: deviationDays(t) })).filter((x) => x.d !== 0);
+  return {
+    tasksShifted: shifted.length,
+    daysLost: shifted.filter((x) => x.d > 0).reduce((a, x) => a + x.d, 0),
+    daysGained: -shifted.filter((x) => x.d < 0).reduce((a, x) => a + x.d, 0),
+  };
+};
 
 /* ═══ Reglas de transición ═══ */
 
@@ -140,7 +205,9 @@ export async function updateTask(
       return { ok: false, status: 422, error: "Estado inválido." };
     }
     // regla: cerrar exige evidencia cuando la tarea la requiere
-    if (patch.status === "HECHA" && t.requiresEvidence && !(t.evidenceIds?.length)) {
+    // (cuenta la del catálogo y la subida como archivo)
+    const hasEvidence = (t.evidenceIds?.length ?? 0) > 0 || getUploads(id).length > 0;
+    if (patch.status === "HECHA" && t.requiresEvidence && !hasEvidence) {
       return {
         ok: false, status: 422,
         error: "Esta tarea exige evidencia para cerrarse: adjunta el soporte antes de marcarla como hecha.",
@@ -231,12 +298,88 @@ export async function verifyEvidence(
   return { ok: true, status: "VERIFICADA" };
 }
 
+/* ═══ Mutación: comentario ═══ */
+
+export function addComment(
+  user: SessionUser,
+  taskId: string,
+  text: string,
+): { ok: true; comment: TaskComment } | { ok: false; status: number; error: string } {
+  // comentar es deliberación: cualquier rol autenticado puede (incluido el directivo)
+  const t = getTask(taskId);
+  if (!t) return { ok: false, status: 404, error: "La tarea no existe." };
+  const clean = text.trim();
+  if (!clean) return { ok: false, status: 422, error: "El comentario no puede estar vacío." };
+  if (clean.length > 2000) return { ok: false, status: 422, error: "Máximo 2.000 caracteres." };
+  const comment: TaskComment = {
+    id: comments().length + 1,
+    taskId,
+    author: user.name,
+    role: user.role,
+    text: clean,
+    at: new Date().toISOString(),
+  };
+  comments().push(comment);
+  audit(user, "task", taskId, "comentario añadido");
+  return { ok: true, comment };
+}
+
+/* ═══ Mutación: adjuntar evidencia (archivo) ═══ */
+
+export function attachEvidence(
+  user: SessionUser,
+  taskId: string,
+  file: { fileName: string; filePath: string; size: number; mime: string },
+  meta: { title: string; kind: string },
+): { ok: true; evidence: UploadedEvidence } | { ok: false; status: number; error: string } {
+  const t = getTask(taskId);
+  if (!t) return { ok: false, status: 404, error: "La tarea no existe." };
+  const ini = INITIATIVES_FULL.find((i) => i.id === t.iniId)!;
+  if (!can(user, "edit_tasks", ini.line)) {
+    return { ok: false, status: 403, error: "Tu rol no puede adjuntar evidencia en esta tarea." };
+  }
+  if (!meta.title.trim()) {
+    return { ok: false, status: 422, error: "La evidencia necesita un título descriptivo." };
+  }
+  const evidence: UploadedEvidence = {
+    id: `EV-U${String(uploads().length + 1).padStart(2, "0")}`,
+    taskId,
+    title: meta.title.trim(),
+    kind: meta.kind || "Documento",
+    ...file,
+    uploadedBy: user.name,
+    date: new Date().toISOString().slice(0, 10),
+    status: "PENDIENTE",   // nace pendiente: la verifica el consultor
+  };
+  uploads().push(evidence);
+  audit(user, "task", taskId, `evidencia adjuntada («${evidence.title}», ${evidence.fileName})`);
+  return { ok: true, evidence };
+}
+
+/** Verificación de evidencia subida (solo consultor). */
+export function verifyUploadedEvidence(
+  user: SessionUser,
+  evidenceId: string,
+): { ok: true } | { ok: false; status: number; error: string } {
+  if (!can(user, "verify_evidence")) {
+    return { ok: false, status: 403, error: "Solo el equipo consultor puede verificar evidencia." };
+  }
+  const ev = uploads().find((u) => u.id === evidenceId);
+  if (!ev) return { ok: false, status: 404, error: "La evidencia no existe." };
+  ev.status = "VERIFICADA";
+  audit(user, "evidence", evidenceId, `evidencia subida verificada («${ev.title}»)`);
+  return { ok: true };
+}
+
 /* ═══ Utilidad para la demo ═══ */
 
 export function resetStore() {
   g.__pgtdTasks = TASKS_SEED.map((t) => ({ ...t }));
   g.__pgtdEvidence = new Map(EVIDENCE_CATALOG.map((e) => [e.id, e.status]));
   g.__pgtdAudit = [];
+  g.__pgtdComments = [];
+  g.__pgtdUploads = [];
+  g.__pgtdBaseline = new Map(TASKS_SEED.map((t) => [t.id, { start: t.start, due: t.due }]));
 }
 
 export { DEMO_TODAY, responsible };

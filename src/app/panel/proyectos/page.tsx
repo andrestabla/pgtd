@@ -37,6 +37,11 @@ type ApiData = {
   editable: Record<string, boolean>;
   canVerifyEvidence: boolean;
   evidenceStatus: Record<string, "VERIFICADA" | "PENDIENTE">;
+  comments: { id: number; taskId: string; author: string; role: string; text: string; at: string }[];
+  uploads: { id: string; taskId: string; title: string; kind: string; fileName: string; size: number; uploadedBy: string; date: string; status: "VERIFICADA" | "PENDIENTE" }[];
+  slippage: { tasksShifted: number; daysLost: number; daysGained: number };
+  deviations: Record<string, number>;
+  baselines: Record<string, { start: string; due: string } | null>;
 };
 
 const fmtDate = (iso: string) => {
@@ -171,6 +176,19 @@ export default function ProyectosPage() {
           foot={`${data.stats.people} personas con tareas asignadas`}
           accent="linear-gradient(90deg, var(--n4), var(--n5))" />
       </div>
+
+      {/* deslizamiento del cronograma (línea base vs vigente) */}
+      {data.slippage.tasksShifted > 0 && (
+        <div className="rise rise-2 mb-5 flex items-center gap-2.5 rounded-xl px-4 py-2.5"
+          style={{ background: "color-mix(in srgb, var(--warn) 9%, white)" }}>
+          <CalendarRange size={14} style={{ color: "var(--warn)" }} />
+          <p className="text-[12px] text-ink-soft">
+            <b>Deslizamiento del cronograma:</b> {data.slippage.tasksShifted} tarea{data.slippage.tasksShifted > 1 ? "s" : ""} reprogramada{data.slippage.tasksShifted > 1 ? "s" : ""} frente a la línea base ·{" "}
+            <b className="num" style={{ color: "var(--bad)" }}>+{data.slippage.daysLost} días perdidos</b>
+            {data.slippage.daysGained > 0 && <> · <span className="num" style={{ color: "var(--ok)" }}>−{data.slippage.daysGained} recuperados</span></>}
+          </p>
+        </div>
+      )}
 
       {/* alertas */}
       {data.alerts.length > 0 && (
@@ -383,6 +401,29 @@ export default function ProyectosPage() {
             canVerify={data.canVerifyEvidence}
             evidenceStatus={data.evidenceStatus}
             audit={data.audit.filter((a) => a.entityId === task.id)}
+            comments={data.comments.filter((c) => c.taskId === task.id)}
+            uploads={data.uploads.filter((u) => u.taskId === task.id)}
+            deviation={data.deviations[task.id] ?? 0}
+            baseline={data.baselines[task.id] ?? null}
+            onComment={async (text) => {
+              setSaving(true); setError(null);
+              const res = await fetch(`/api/td/tasks/${task.id}/comments`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text }),
+              });
+              if (!res.ok) setError((await res.json().catch(() => null))?.error ?? "Error");
+              else await refetch();
+              setSaving(false);
+            }}
+            onUpload={async (file, title, kind) => {
+              setSaving(true); setError(null);
+              const fd = new FormData();
+              fd.append("file", file); fd.append("title", title); fd.append("kind", kind);
+              const res = await fetch(`/api/td/tasks/${task.id}/evidence`, { method: "POST", body: fd });
+              if (!res.ok) setError((await res.json().catch(() => null))?.error ?? "Error");
+              else await refetch();
+              setSaving(false);
+            }}
             saving={saving}
             userRole={user.role}
             onClose={() => setOpenTask(null)}
@@ -428,7 +469,7 @@ function TaskCard({ t, person: p, onOpen }: { t: Task; person: Person | null; on
 
 /* ─── ficha con edición ─── */
 
-function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus, audit, saving, userRole, onClose, onOpenTask, onPatch, onVerify, allTasks }: {
+function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus, audit, comments, uploads, deviation, baseline, saving, userRole, onClose, onOpenTask, onPatch, onVerify, onComment, onUpload, allTasks }: {
   task: Task;
   people: Person[];
   personOf: (id: string) => Person | null;
@@ -442,8 +483,17 @@ function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus
   onOpenTask: (id: string) => void;
   onPatch: (id: string, patch: Record<string, unknown>) => Promise<void>;
   onVerify: (id: string) => Promise<void>;
+  onComment: (text: string) => Promise<void>;
+  onUpload: (file: File, title: string, kind: string) => Promise<void>;
+  comments: ApiData["comments"];
+  uploads: ApiData["uploads"];
+  deviation: number;
+  baseline: { start: string; due: string } | null;
   allTasks: Task[];
 }) {
+  const [commentText, setCommentText] = useState("");
+  const [evTitle, setEvTitle] = useState("");
+  const [evFile, setEvFile] = useState<File | null>(null);
   const [draft, setDraft] = useState({ status: task.status, assigneeId: task.assigneeId, start: task.start, due: task.due });
   useEffect(() => {
     setDraft({ status: task.status, assigneeId: task.assigneeId, start: task.start, due: task.due });
@@ -522,6 +572,17 @@ function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus
               )}
             </div>
           </div>
+
+          {/* línea base y deslizamiento */}
+          {baseline && deviation !== 0 && (
+            <p className="num rounded-lg px-3 py-2 text-[11px]"
+              style={{
+                background: deviation > 0 ? "color-mix(in srgb, var(--warn) 10%, white)" : "color-mix(in srgb, var(--ok) 8%, white)",
+                color: deviation > 0 ? "var(--warn)" : "var(--ok)",
+              }}>
+              Línea base: {fmtDate(baseline.due)} → vigente {fmtDate(task.due)} ({deviation > 0 ? "+" : ""}{deviation} días)
+            </p>
+          )}
 
           {/* estado */}
           <div>
@@ -603,14 +664,105 @@ function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus
                   </div>
                 );
               })
-            ) : task.requiresEvidence ? (
-              <p className="rounded-lg px-3 py-2 text-[11.5px]"
-                style={{ background: "color-mix(in srgb, var(--warn) 10%, white)", color: "var(--warn)" }}>
-                El cierre exige evidencia: el servidor rechazará «Hecha» sin soporte adjunto.
-              </p>
-            ) : (
-              <p className="text-[11px] italic text-faint">No exige evidencia formal.</p>
+            ) : null}
+            {/* evidencias subidas como archivo */}
+            {uploads.map((u) => (
+              <div key={u.id} className="mb-1 flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <a href={`/api/files/${u.id}`} className="text-[11.5px] font-semibold text-cyan-deep hover:underline">
+                    {u.title}
+                  </a>
+                  <div className="num mt-0.5 text-[9.5px] text-faint">
+                    {u.fileName} · {(u.size / 1024).toFixed(0)} KB · subida por {u.uploadedBy} · {u.date}
+                  </div>
+                </div>
+                {u.status === "VERIFICADA" ? (
+                  <span className="chip chip-ok"><ShieldCheck size={10} /> Verificada</span>
+                ) : canVerify ? (
+                  <button onClick={() => onVerify(u.id)} disabled={saving} className="chip chip-cyan cursor-pointer">
+                    Verificar
+                  </button>
+                ) : (
+                  <span className="chip chip-warn">Pendiente</span>
+                )}
+              </div>
+            ))}
+            {(task.evidenceIds?.length ?? 0) === 0 && uploads.length === 0 && (
+              task.requiresEvidence ? (
+                <p className="rounded-lg px-3 py-2 text-[11.5px]"
+                  style={{ background: "color-mix(in srgb, var(--warn) 10%, white)", color: "var(--warn)" }}>
+                  El cierre exige evidencia: el servidor rechazará «Hecha» sin soporte adjunto.
+                </p>
+              ) : (
+                <p className="text-[11px] italic text-faint">No exige evidencia formal.</p>
+              )
             )}
+            {/* adjuntar archivo (si puede editar) */}
+            {editable && (
+              <div className="mt-2 space-y-1.5 rounded-lg bg-surface-2/70 p-2.5">
+                <input type="text" placeholder="Título de la evidencia (p. ej. Acta del comité)"
+                  value={evTitle} onChange={(e) => setEvTitle(e.target.value)}
+                  className="input !py-1.5 text-[11.5px]" />
+                <div className="flex items-center gap-2">
+                  <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.zip,.csv"
+                    onChange={(e) => setEvFile(e.target.files?.[0] ?? null)}
+                    className="flex-1 text-[10.5px] text-muted file:mr-2 file:rounded-lg file:border-0 file:bg-surface file:px-2.5 file:py-1.5 file:text-[10.5px] file:font-bold file:text-ink" />
+                  <button
+                    onClick={async () => {
+                      if (evFile && evTitle.trim()) {
+                        await onUpload(evFile, evTitle, "Documento");
+                        setEvFile(null); setEvTitle("");
+                      }
+                    }}
+                    disabled={saving || !evFile || !evTitle.trim()}
+                    className="btn-ghost !py-1.5 text-[11px] disabled:opacity-40">
+                    Adjuntar
+                  </button>
+                </div>
+                <p className="text-[9.5px] text-faint">
+                  Máx. 15 MB · pdf, office, imagen, zip, csv · nace pendiente de verificación del consultor.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* comentarios */}
+          <div>
+            <div className="label mb-1.5 !text-[8.5px]">Comentarios ({comments.length})</div>
+            <div className="max-h-44 space-y-1.5 overflow-y-auto">
+              {comments.map((c) => (
+                <div key={c.id} className="rounded-lg bg-surface-2/70 px-3 py-2">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[11px] font-bold text-ink">{c.author}</span>
+                    <span className="num text-[9px] text-faint">
+                      {new Date(c.at).toLocaleString("es-CO", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[11.5px] leading-snug text-ink-soft">{c.text}</p>
+                </div>
+              ))}
+              {comments.length === 0 && (
+                <p className="text-[11px] italic text-faint">Sin comentarios aún — cualquier rol puede deliberar aquí.</p>
+              )}
+            </div>
+            <div className="mt-1.5 flex gap-1.5">
+              <input type="text" placeholder="Escribe un comentario…"
+                value={commentText} onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={async (e) => {
+                  if (e.key === "Enter" && commentText.trim()) {
+                    await onComment(commentText); setCommentText("");
+                  }
+                }}
+                className="input flex-1 !py-1.5 text-[11.5px]" />
+              <button
+                onClick={async () => {
+                  if (commentText.trim()) { await onComment(commentText); setCommentText(""); }
+                }}
+                disabled={saving || !commentText.trim()}
+                className="btn-ghost !py-1.5 text-[11px] disabled:opacity-40">
+                Enviar
+              </button>
+            </div>
           </div>
 
           {/* auditoría */}

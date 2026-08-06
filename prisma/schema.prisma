@@ -102,6 +102,33 @@ model ProjectTask {
   @@index([assigneeId, due])
 }
 
+model TaskComment {
+  id       Int      @id @default(autoincrement())
+  taskId   String
+  author   String
+  role     String
+  text     String
+  at       DateTime @default(now())
+
+  @@index([taskId, at])
+}
+
+model FileAsset {
+  id         String   @id            // EV-U01…
+  taskId     String
+  title      String
+  kind       String
+  fileName   String
+  filePath   String                  // clave local o de R2
+  size       Int
+  mime       String
+  uploadedBy String
+  status     String   @default("PENDIENTE")
+  at         DateTime @default(now())
+
+  @@index([taskId])
+}
+
 // ─── Portafolio académico ────────────────────────────────────────────────────
 
 model Program {

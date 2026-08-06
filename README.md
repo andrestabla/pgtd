@@ -106,6 +106,20 @@ persisten vía Prisma cuando `DATABASE_URL` está configurada, con hidratación
 al arrancar. Conectar Neon/Postgres no cambia ninguna regla — solo el origen.
 `POST /api/td/reset` (solo consultor) restablece la demo.
 
+## Fase 2 (local): colaboración, archivos y línea base
+
+- **Comentarios por tarea** — deliberación abierta a todos los roles
+  (incluido el directivo), con validación y auditoría.
+- **Evidencia con archivo real** — subida multipart (15 MB; pdf/office/
+  imagen/zip/csv) a `var/uploads/` con descarga autenticada
+  (`/api/files/:id`). La interfaz es la de R2: en producción cambia el
+  destino, no el contrato. La evidencia subida nace PENDIENTE, la verifica
+  el consultor, y **desbloquea el cierre** de tareas que la exigen.
+- **Línea base del cronograma** — las fechas del plan aprobado se congelan;
+  reprogramar mueve la fecha vigente y el deslizamiento se mide por tarea
+  (ficha: «línea base → vigente, +n días») y acumulado (franja del gestor:
+  días perdidos/recuperados).
+
 ## Vista pública de solo lectura
 
 El botón «Vista pública» de la topbar genera un enlace firmado (HMAC del

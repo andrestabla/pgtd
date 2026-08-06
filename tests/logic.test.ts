@@ -594,3 +594,72 @@ test("store: verificación de evidencia solo por consultor y auditada", async ()
   assert.ok(getAudit("EV-02").some((a) => a.change.includes("verificada")));
   resetStore();
 });
+
+/* ─── fase 2: comentarios, evidencia subida y línea base ─── */
+
+import {
+  addComment, attachEvidence, verifyUploadedEvidence, getComments, getUploads,
+  deviationDays, portfolioSlippage, getBaseline,
+} from "../src/server/store";
+
+test("fase2: comentar es deliberación de todos los roles, con validación", () => {
+  resetStore();
+  const r1 = addComment(U.directivo, "T-i1-06", "Observación del Consejo.");
+  assert.ok(r1.ok && r1.comment.author === "Directivo Test");
+  const r2 = addComment(U.resp1, "T-i1-06", "   ");
+  assert.ok(!r2.ok && r2.status === 422);
+  const r3 = addComment(U.consultor, "T-nope", "x");
+  assert.ok(!r3.ok && r3.status === 404);
+  assert.equal(getComments("T-i1-06").length, 1);
+  resetStore();
+});
+
+test("fase2: adjuntar evidencia respeta permisos y desbloquea el cierre", async () => {
+  resetStore();
+  // responsable de línea 1 no puede adjuntar en línea 4
+  const denied = attachEvidence(U.resp1, "T-i2-06",
+    { fileName: "a.pdf", filePath: "x", size: 10, mime: "application/pdf" },
+    { title: "Reglas de calidad", kind: "Documento" });
+  assert.ok(!denied.ok && denied.status === 403);
+  // sin título → 422
+  const noTitle = attachEvidence(U.consultor, "T-i1-10",
+    { fileName: "a.pdf", filePath: "x", size: 10, mime: "application/pdf" },
+    { title: "  ", kind: "Documento" });
+  assert.ok(!noTitle.ok && noTitle.status === 422);
+  // el cierre estaba bloqueado…
+  const blocked = await updateTask(U.consultor, "T-i1-10", { status: "HECHA" });
+  assert.ok(!blocked.ok && blocked.status === 422);
+  // …y se desbloquea al adjuntar
+  const attached = attachEvidence(U.consultor, "T-i1-10",
+    { fileName: "acta.pdf", filePath: "k", size: 100, mime: "application/pdf" },
+    { title: "Acta del comité", kind: "Acta" });
+  assert.ok(attached.ok && attached.evidence.status === "PENDIENTE");
+  const closed = await updateTask(U.consultor, "T-i1-10", { status: "HECHA" });
+  assert.ok(closed.ok);
+  // verificación de la subida: solo consultor
+  const vDenied = verifyUploadedEvidence(U.lider, attached.ok ? attached.evidence.id : "");
+  assert.ok(!vDenied.ok && vDenied.status === 403);
+  const vOk = verifyUploadedEvidence(U.consultor, attached.ok ? attached.evidence.id : "");
+  assert.ok(vOk.ok);
+  assert.equal(getUploads("T-i1-10")[0].status, "VERIFICADA");
+  resetStore();
+});
+
+test("fase2: la línea base congela el plan y mide el deslizamiento", async () => {
+  resetStore();
+  const base = getBaseline("T-i9-05")!;
+  assert.equal(base.due, "2027-04-25");
+  const r = await updateTask(U.consultor, "T-i9-05", { due: "2027-05-09" });
+  assert.ok(r.ok);
+  assert.equal(deviationDays(getTask("T-i9-05")!), 14);
+  // la línea base NO se mueve con la reprogramación
+  assert.equal(getBaseline("T-i9-05")!.due, "2027-04-25");
+  const slip = portfolioSlippage();
+  assert.equal(slip.tasksShifted, 1);
+  assert.equal(slip.daysLost, 14);
+  // adelantar recupera días
+  const r2 = await updateTask(U.consultor, "T-i4-04", { due: "2027-03-15", start: "2027-03-10" });
+  assert.ok(r2.ok, JSON.stringify(r2));
+  assert.ok(portfolioSlippage().daysGained > 0);
+  resetStore();
+});
