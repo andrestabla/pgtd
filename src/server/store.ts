@@ -433,6 +433,191 @@ export function verifyUploadedEvidence(
   return { ok: true };
 }
 
+/* ═══ Crear y archivar tareas ═══ */
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const addDays = (iso: string, days: number) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+const daysBetween = (a: string, b: string) =>
+  Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000);
+
+const archived = () => {
+  const ga = g as unknown as { __pgtdArchived?: Task[] };
+  if (!ga.__pgtdArchived) ga.__pgtdArchived = [];
+  return ga.__pgtdArchived;
+};
+
+export const getArchivedTasks = (): Task[] => archived();
+
+export function createTask(
+  user: SessionUser,
+  input: {
+    iniId: string; title: string; desc: string; assigneeId: string;
+    coAssigneeIds?: string[]; start: string; due: string;
+    dependsOn?: string[]; requiresEvidence?: boolean; note?: string;
+  },
+): MutationResult {
+  const ini = INITIATIVES_FULL.find((i) => i.id === input.iniId);
+  if (!ini) return { ok: false, status: 422, error: "La iniciativa no existe." };
+
+  if (!can(user, "edit_tasks", ini.line)) {
+    return {
+      ok: false, status: 403,
+      error: user.role === "DIRECTIVO"
+        ? "Tu rol es de consulta: no crea tareas."
+        : `No puedes crear tareas en la línea 4.${ini.line}: tu ámbito es la línea 4.${user.line}.`,
+    };
+  }
+
+  const title = input.title?.trim() ?? "";
+  const desc = input.desc?.trim() ?? "";
+  if (title.length < 8) return { ok: false, status: 422, error: "El título debe describir la actividad (mínimo 8 caracteres)." };
+  if (desc.length < 20) return { ok: false, status: 422, error: "La descripción debe declarar qué se hace y qué produce (mínimo 20 caracteres)." };
+  if (!PEOPLE.some((p) => p.id === input.assigneeId)) {
+    return { ok: false, status: 422, error: "El responsable principal debe ser una persona del directorio." };
+  }
+  if (!DATE_RE.test(input.start ?? "") || !DATE_RE.test(input.due ?? "")) {
+    return { ok: false, status: 422, error: "Fechas inválidas (YYYY-MM-DD)." };
+  }
+  if (input.due < input.start) {
+    return { ok: false, status: 422, error: "La fecha compromiso no puede ser anterior al inicio." };
+  }
+  for (const d of input.dependsOn ?? []) {
+    if (!tasks().some((t) => t.id === d)) {
+      return { ok: false, status: 422, error: `La dependencia ${d} no existe.` };
+    }
+  }
+
+  // id secuencial dentro de la iniciativa (cuenta también las archivadas)
+  const nums = [...tasks(), ...archived()]
+    .filter((t) => t.iniId === input.iniId)
+    .map((t) => Number(t.id.split("-").pop()));
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  const id = `T-${input.iniId}-${String(next).padStart(2, "0")}`;
+
+  const task: Task = {
+    id, iniId: input.iniId, title, desc,
+    assigneeId: input.assigneeId,
+    coAssigneeIds: [...new Set(input.coAssigneeIds ?? [])]
+      .filter((c) => c !== input.assigneeId && PEOPLE.some((p) => p.id === c)),
+    start: input.start, due: input.due,
+    status: "POR_HACER",
+    requiresEvidence: Boolean(input.requiresEvidence),
+    dependsOn: input.dependsOn?.length ? input.dependsOn : undefined,
+    note: input.note?.trim() || undefined,
+  };
+  tasks().push(task);
+  baselines().set(id, { start: task.start, due: task.due });
+  audit(user, "task", id, `tarea creada («${title}») en ${ini.name}`);
+  return { ok: true, task };
+}
+
+export function archiveTask(user: SessionUser, id: string): MutationResult {
+  const t = getTask(id);
+  if (!t) return { ok: false, status: 404, error: "La tarea no existe." };
+  const ini = INITIATIVES_FULL.find((i) => i.id === t.iniId)!;
+  if (!can(user, "edit_tasks", ini.line)) {
+    return { ok: false, status: 403, error: "Tu rol no puede archivar tareas de esta línea." };
+  }
+  const dependents = tasks().filter((x) => x.dependsOn?.includes(id));
+  if (dependents.length) {
+    return {
+      ok: false, status: 422,
+      error: `No se puede archivar: ${dependents.map((d) => d.id).join(", ")} depende(n) de esta tarea. Reasigna o archiva primero las dependientes.`,
+    };
+  }
+  const idx = tasks().findIndex((x) => x.id === id);
+  archived().push(tasks()[idx]);
+  tasks().splice(idx, 1);
+  audit(user, "task", id, `tarea archivada («${t.title}»)`);
+  return { ok: true, task: t };
+}
+
+/* ═══ Reprogramación en cascada ═══
+   Cuando una fecha compromiso se corre, las tareas dependientes (transitivas,
+   no cerradas) se corren el mismo número de días. Vista previa antes de
+   aplicar; el deslizamiento se sigue midiendo contra la línea base. */
+
+export type CascadeShift = {
+  id: string; title: string; status: TaskStatus;
+  start: string; due: string;             // vigentes
+  newStart: string; newDue: string;
+  newDeviation: number;                    // días contra la línea base tras aplicar
+};
+
+export function cascadePreview(id: string, newDue: string):
+  | { ok: true; delta: number; shifts: CascadeShift[] }
+  | { ok: false; status: number; error: string } {
+  const root = getTask(id);
+  if (!root) return { ok: false, status: 404, error: "La tarea no existe." };
+  if (!DATE_RE.test(newDue)) return { ok: false, status: 422, error: "Fecha inválida (YYYY-MM-DD)." };
+  if (newDue < root.start) return { ok: false, status: 422, error: "La nueva fecha compromiso no puede ser anterior al inicio de la tarea." };
+  const delta = daysBetween(root.due, newDue);
+  if (delta === 0) return { ok: false, status: 422, error: "La fecha no cambia: nada que reprogramar." };
+
+  // dependientes transitivas no cerradas
+  const affected = new Set<string>([id]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const t of tasks()) {
+      if (t.status === "HECHA" || affected.has(t.id)) continue;
+      if (t.dependsOn?.some((d) => affected.has(d))) {
+        affected.add(t.id);
+        grew = true;
+      }
+    }
+  }
+  affected.delete(id);
+
+  const shifts: CascadeShift[] = [...affected].map((tid) => {
+    const t = getTask(tid)!;
+    const newStart = addDays(t.start, delta);
+    const nd = addDays(t.due, delta);
+    const base = baselines().get(tid);
+    return {
+      id: tid, title: t.title, status: t.status,
+      start: t.start, due: t.due, newStart, newDue: nd,
+      newDeviation: base ? daysBetween(base.due, nd) : 0,
+    };
+  });
+  return { ok: true, delta, shifts };
+}
+
+export function applyCascade(user: SessionUser, id: string, newDue: string):
+  | { ok: true; delta: number; shifted: number }
+  | { ok: false; status: number; error: string } {
+  const preview = cascadePreview(id, newDue);
+  if (!preview.ok) return preview;
+
+  // permiso sobre TODAS las líneas afectadas
+  const root = getTask(id)!;
+  const allIds = [id, ...preview.shifts.map((s) => s.id)];
+  for (const tid of allIds) {
+    const t = getTask(tid)!;
+    const ini = INITIATIVES_FULL.find((i) => i.id === t.iniId)!;
+    if (!can(user, "edit_tasks", ini.line)) {
+      return {
+        ok: false, status: 403,
+        error: `El corrimiento toca la línea 4.${ini.line} (${tid}) y tu ámbito es la línea 4.${user.line}.`,
+      };
+    }
+  }
+
+  root.due = newDue;
+  for (const s of preview.shifts) {
+    const t = getTask(s.id)!;
+    t.start = s.newStart;
+    t.due = s.newDue;
+  }
+  audit(user, "task", id,
+    `reprogramación en cadena: ${preview.delta > 0 ? "+" : ""}${preview.delta} días · ${preview.shifts.length + 1} tareas (${allIds.join(", ")})`);
+  return { ok: true, delta: preview.delta, shifted: preview.shifts.length + 1 };
+}
+
 /* ═══ Captura de la medición A3 ═══
    El instrumento se aplica desde la plataforma: el responsable de línea
    registra la percepción de SUS variables; el consultor califica D/I/K
@@ -779,6 +964,7 @@ export function resetStore() {
   g.__pgtdPublished = null;
   g.__pgtdKpiReports = new Map();
   g.__pgtdIniOverrides = new Map();
+  (g as unknown as { __pgtdArchived?: Task[] }).__pgtdArchived = [];
 }
 
 export { DEMO_TODAY, responsible };

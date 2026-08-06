@@ -37,3 +37,22 @@ export async function GET() {
     baselines: Object.fromEntries(getTasks().map((t) => [t.id, getBaseline(t.id)])),
   });
 }
+
+// POST /api/td/tasks — crea una tarea en una iniciativa. El store exige el
+// permiso edit_tasks por línea (403) y valida título, descripción,
+// responsable, fechas y dependencias (422 con explicación).
+export async function POST(req: Request) {
+  const user = await getSession();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  await hydrateFromDb();
+
+  const body = await req.json().catch(() => null);
+  if (!body) return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
+
+  const { createTask } = await import("@/server/store");
+  const result = createTask(user, body);
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
+  }
+  return NextResponse.json({ task: result.task }, { status: 201 });
+}

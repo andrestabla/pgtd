@@ -99,3 +99,53 @@ test("iniciativas: edición con permisos, revisión de factores y bitácora", ()
   resetStore();
   assert.equal(effectiveInitiatives().find((i) => i.id === "i5")!.progress, i5.progress);
 });
+
+/* ─── crear/archivar tareas y cascada ─── */
+
+import {
+  createTask, archiveTask, cascadePreview, applyCascade, getTask, deviationDays,
+} from "../src/server/store";
+
+test("tareas: creación validada, archivo con dependientes y cascada", () => {
+  resetStore();
+
+  // validaciones de la creación
+  assert.ok(!(createTask(consultor, { iniId: "no", title: "x", desc: "x", assigneeId: "P01", start: "2027-03-01", due: "2027-03-10" }) as { ok: boolean }).ok);
+  assert.ok(!(createTask(consultor, { iniId: "i2", title: "corta", desc: "descripción suficientemente larga aquí", assigneeId: "P01", start: "2027-03-01", due: "2027-03-10" }) as { ok: boolean }).ok, "título corto");
+  assert.ok(!(createTask(resp1, { iniId: "i2", title: "Tarea de otra línea válida", desc: "descripción suficientemente larga aquí", assigneeId: "P01", start: "2027-03-01", due: "2027-03-10" }) as { ok: boolean }).ok, "línea ajena");
+
+  // creación válida: id secuencial y línea base congelada
+  const c = createTask(consultor, {
+    iniId: "i2", title: "Taller de dueños de dato",
+    desc: "Sesión con decanaturas para designar dueños; produce el acta.",
+    assigneeId: "P10", start: "2027-03-12", due: "2027-03-26", dependsOn: ["T-i2-04"],
+  });
+  assert.ok(c.ok);
+  assert.equal(c.task.id, "T-i2-08");
+  assert.equal(deviationDays(c.task), 0);
+
+  // archivar: bloqueado si hay dependientes
+  const blocked = archiveTask(consultor, "T-i2-04");
+  assert.ok(!blocked.ok && blocked.status === 422 && blocked.error.includes("T-i2-08"));
+  const arch = archiveTask(consultor, "T-i2-08");
+  assert.ok(arch.ok);
+  assert.equal(getTask("T-i2-08"), null);
+
+  // cascada: preview transitiva y aplicación con desviación medida
+  const pv = cascadePreview("T-i9-03", "2027-03-14");
+  assert.ok(pv.ok);
+  assert.equal(pv.delta, 7);
+  assert.deepEqual(pv.shifts.map((s) => s.id).sort(), ["T-i9-05", "T-i9-06", "T-i9-07"]);
+
+  const ap = applyCascade(consultor, "T-i9-03", "2027-03-14");
+  assert.ok(ap.ok && ap.shifted === 4);
+  assert.equal(getTask("T-i9-05")!.due, "2027-05-02");
+  assert.equal(deviationDays(getTask("T-i9-05")!), 7);
+
+  // el responsable de línea 1 no aplica cascadas de la línea 1 si tocan… su línea sí puede:
+  const pv2 = cascadePreview("T-i9-03", "2027-03-21");
+  assert.ok(pv2.ok);
+
+  resetStore();
+  assert.equal(getTask("T-i9-05")!.due, "2027-04-25");
+});

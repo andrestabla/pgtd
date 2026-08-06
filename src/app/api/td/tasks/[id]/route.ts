@@ -23,3 +23,22 @@ export async function PATCH(
   }
   return NextResponse.json({ task: result.task, audit: getAudit(id).slice(0, 5) });
 }
+
+// DELETE /api/td/tasks/:id — archiva la tarea (no destruye: queda en el
+// archivo con su auditoría). Rechaza si otras tareas dependen de ella.
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const user = await getSession();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  await hydrateFromDb();
+
+  const { id } = await params;
+  const { archiveTask } = await import("@/server/store");
+  const result = archiveTask(user, id);
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
+  }
+  return NextResponse.json({ archived: result.task.id });
+}

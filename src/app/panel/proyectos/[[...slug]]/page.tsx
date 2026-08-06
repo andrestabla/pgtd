@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader, Card, CardHeader, StatCard } from "@/components/ui";
-import { AccessChip, useUser } from "@/components/user-context";
+import { AccessChip, useUser, useCan } from "@/components/user-context";
 import { INITIATIVES, EVIDENCES } from "@/data/demo";
 import {
   initials, isOverdue as isOverdueFn, dueSoon as dueSoonFn, DEMO_TODAY,
@@ -24,6 +24,7 @@ import type { TaskAlert, Workload } from "@/lib/proyectos";
 import {
   KanbanSquare, CalendarRange, Users, X, Link2, FileText, ShieldCheck,
   AlertTriangle, Lock, ChevronRight, Loader2, Save, History, Paperclip,
+  Plus, Archive,
 } from "lucide-react";
 
 type View = "tablero" | "cronograma" | "personas";
@@ -127,6 +128,29 @@ export default function ProyectosPage() {
     setSaving(false);
   }, [refetch]);
 
+  const [creating, setCreating] = useState(false);
+  const createTask = useCallback(async (input: Record<string, unknown>) => {
+    setSaving(true); setError(null);
+    const res = await fetch("/api/td/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const ok = res.ok;
+    if (!ok) setError((await res.json().catch(() => null))?.error ?? `Error ${res.status}`);
+    else { await refetch(); setCreating(false); }
+    setSaving(false);
+    return ok;
+  }, [refetch]);
+
+  const archiveTask = useCallback(async (id: string) => {
+    setSaving(true); setError(null);
+    const res = await fetch(`/api/td/tasks/${id}`, { method: "DELETE" });
+    if (!res.ok) setError((await res.json().catch(() => null))?.error ?? `Error ${res.status}`);
+    else { setOpenTask(null); await refetch(); }
+    setSaving(false);
+  }, [refetch]);
+
   const tasks = useMemo(() => data?.tasks ?? [], [data]);
   const personOf = useCallback(
     (id: string) => data?.people.find((p) => p.id === id) ?? null, [data]);
@@ -139,6 +163,7 @@ export default function ProyectosPage() {
   }, [tasks, iniFilter, personFilter]);
 
   const task = openTask ? tasks.find((t) => t.id === openTask) ?? null : null;
+  const canCreate = useCan("edit_tasks");
 
   if (!data) {
     return (
@@ -166,6 +191,12 @@ export default function ProyectosPage() {
                 Ficha de la iniciativa →
               </Link>
             )}
+            {canCreate && (
+              <button onClick={() => setCreating((c) => !c)}
+                className="btn-primary !py-1.5 text-[12px]">
+                <Plus size={13} /> Nueva tarea
+              </button>
+            )}
             <AccessChip module="proyectos" />
             <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
               {([["tablero", KanbanSquare, "Tablero"], ["cronograma", CalendarRange, "Cronograma"], ["personas", Users, "Personas"]] as const).map(([v, Icon, label]) => (
@@ -188,6 +219,13 @@ export default function ProyectosPage() {
           <p className="flex-1 text-[12.5px] leading-relaxed text-ink-soft">{error}</p>
           <button onClick={() => setError(null)} className="text-faint hover:text-ink"><X size={14} /></button>
         </div>
+      )}
+
+      {/* alta de tarea */}
+      {creating && canCreate && (
+        <NewTaskForm people={data.people} allTasks={tasks}
+          defaultIni={iniFilter ?? INITIATIVES[0].id}
+          saving={saving} onCreate={createTask} onClose={() => setCreating(false)} />
       )}
 
       {/* métricas */}
@@ -461,6 +499,8 @@ export default function ProyectosPage() {
             onOpenTask={setOpenTask}
             onPatch={patchTask}
             onVerify={verifyEv}
+            onArchive={archiveTask}
+            onRefetch={refetch}
             allTasks={tasks}
           />
         )}
@@ -516,7 +556,7 @@ function TaskCard({ t, person: p, onOpen }: { t: Task; person: Person | null; on
 
 /* ─── ficha con edición ─── */
 
-function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus, audit, comments, uploads, deviation, baseline, saving, userRole, onClose, onOpenTask, onPatch, onVerify, onComment, onUpload, allTasks }: {
+function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus, audit, comments, uploads, deviation, baseline, saving, userRole, onClose, onOpenTask, onPatch, onVerify, onArchive, onRefetch, onComment, onUpload, allTasks }: {
   task: Task;
   people: Person[];
   personOf: (id: string) => Person | null;
@@ -530,6 +570,8 @@ function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus
   onOpenTask: (id: string) => void;
   onPatch: (id: string, patch: Record<string, unknown>) => Promise<void>;
   onVerify: (id: string) => Promise<void>;
+  onArchive: (id: string) => Promise<void>;
+  onRefetch: () => Promise<void>;
   onComment: (text: string) => Promise<void>;
   onUpload: (file: File, title: string, kind: string) => Promise<void>;
   comments: ApiData["comments"];
@@ -700,6 +742,9 @@ function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus
               Línea base: {fmtDate(baseline.due)} → vigente {fmtDate(task.due)} ({deviation > 0 ? "+" : ""}{deviation} días)
             </p>
           )}
+
+          {/* reprogramación en cadena (si tiene dependientes) */}
+          <CascadeBlock task={task} allTasks={allTasks} editable={editable} onRefetch={onRefetch} />
 
           {/* estado */}
           <div>
@@ -902,8 +947,197 @@ function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus
               </div>
             </div>
           )}
+
+          {/* archivar */}
+          {editable && (
+            <button
+              onClick={() => {
+                if (window.confirm(`¿Archivar «${task.title}»? Sale del plan activo pero conserva su auditoría.`)) {
+                  onArchive(task.id);
+                }
+              }}
+              disabled={saving}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-[11.5px] font-semibold text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40">
+              <Archive size={12} /> Archivar tarea
+            </button>
+          )}
         </div>
       </Card>
+    </div>
+  );
+}
+
+/* ─── alta de tarea ─── */
+
+function NewTaskForm({ people, allTasks, defaultIni, saving, onCreate, onClose }: {
+  people: Person[];
+  allTasks: Task[];
+  defaultIni: string;
+  saving: boolean;
+  onCreate: (input: Record<string, unknown>) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  const [iniId, setIniId] = useState(defaultIni);
+  const [title, setTitle] = useState("");
+  const [desc, setDesc] = useState("");
+  const [assigneeId, setAssigneeId] = useState(people[0]?.id ?? "P01");
+  const [start, setStart] = useState(DEMO_TODAY);
+  const [due, setDue] = useState(DEMO_TODAY);
+  const [dependsOn, setDependsOn] = useState("");
+  const [requiresEvidence, setRequiresEvidence] = useState(false);
+
+  const iniTasks = allTasks.filter((t) => t.iniId === iniId);
+
+  return (
+    <Card className="rise mb-5 ring-1 ring-cyan/40">
+      <CardHeader title="Nueva tarea"
+        sub="Nace en «Por hacer», con línea base congelada en sus fechas — cerrar exigirá evidencia"
+        right={<button onClick={onClose} className="rounded-md p-1 text-faint hover:bg-surface-2 hover:text-ink"><X size={15} /></button>} />
+      <div className="grid gap-3 px-5 pb-5 lg:grid-cols-2">
+        <div className="space-y-2.5">
+          <div>
+            <div className="label mb-1 !text-[8.5px]">Iniciativa</div>
+            <select value={iniId} onChange={(e) => { setIniId(e.target.value); setDependsOn(""); }}
+              className="input !py-2 text-[12px]">
+              {INITIATIVES.map((i) => (
+                <option key={i.id} value={i.id}>{i.id.toUpperCase()} · {i.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div className="label mb-1 !text-[8.5px]">Título</div>
+            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+              placeholder="Qué actividad se ejecuta (mín. 8 caracteres)"
+              className="input !py-2 text-[12px]" />
+          </div>
+          <div>
+            <div className="label mb-1 !text-[8.5px]">Descripción — qué se hace y qué produce</div>
+            <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={3}
+              placeholder="Alcance verificable de la actividad (mín. 20 caracteres)"
+              className="input w-full resize-y text-[12px]" />
+          </div>
+        </div>
+        <div className="space-y-2.5">
+          <div>
+            <div className="label mb-1 !text-[8.5px]">Responsable principal</div>
+            <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}
+              className="input !py-2 text-[12px]">
+              {people.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.cargo}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <div className="label mb-1 !text-[8.5px]">Inicio</div>
+              <input type="date" value={start} onChange={(e) => setStart(e.target.value)}
+                className="input !py-1.5 text-[12px]" />
+            </div>
+            <div>
+              <div className="label mb-1 !text-[8.5px]">Compromiso</div>
+              <input type="date" value={due} onChange={(e) => setDue(e.target.value)}
+                className="input !py-1.5 text-[12px]" />
+            </div>
+          </div>
+          <div>
+            <div className="label mb-1 !text-[8.5px]">Depende de (opcional)</div>
+            <select value={dependsOn} onChange={(e) => setDependsOn(e.target.value)}
+              className="input !py-2 text-[12px]">
+              <option value="">Sin prerrequisito</option>
+              {iniTasks.map((t) => (
+                <option key={t.id} value={t.id}>{t.id} · {t.title.slice(0, 48)}</option>
+              ))}
+            </select>
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 pt-1 text-[11.5px] text-ink-soft">
+            <input type="checkbox" checked={requiresEvidence}
+              onChange={(e) => setRequiresEvidence(e.target.checked)} />
+            Entregable formal (marca de evidencia en el tablero)
+          </label>
+          <button
+            onClick={() => onCreate({
+              iniId, title, desc, assigneeId, start, due,
+              dependsOn: dependsOn ? [dependsOn] : undefined, requiresEvidence,
+            })}
+            disabled={saving || title.trim().length < 8 || desc.trim().length < 20 || !start || !due}
+            className="btn-primary w-full !py-2 text-[12.5px] disabled:opacity-40">
+            {saving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+            Crear tarea
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ─── reprogramación en cadena ─── */
+
+type CascadeShiftUi = {
+  id: string; title: string; due: string; newDue: string; newDeviation: number;
+};
+
+function CascadeBlock({ task, allTasks, editable, onRefetch }: {
+  task: Task; allTasks: Task[]; editable: boolean; onRefetch: () => Promise<void>;
+}) {
+  const dependents = allTasks.filter((t) => t.dependsOn?.includes(task.id) && t.status !== "HECHA");
+  const [due, setDue] = useState(task.due);
+  const [preview, setPreview] = useState<{ delta: number; shifts: CascadeShiftUi[] } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { setDue(task.due); setPreview(null); setErr(null); }, [task.id, task.due]);
+
+  if (!editable || dependents.length === 0) return null;
+
+  const call = async (apply: boolean) => {
+    setBusy(true); setErr(null);
+    const res = await fetch(`/api/td/tasks/${task.id}/cascade`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ due, apply }),
+    });
+    const j = await res.json().catch(() => null);
+    if (!res.ok) setErr(j?.error ?? `Error ${res.status}`);
+    else if (apply) { setPreview(null); await onRefetch(); }
+    else setPreview(j);
+    setBusy(false);
+  };
+
+  return (
+    <div className="rounded-lg bg-surface-2/70 p-2.5">
+      <div className="label mb-1.5 flex items-center gap-1 !text-[8.5px]">
+        <CalendarRange size={10} /> Reprogramar en cadena · {dependents.length} dependiente{dependents.length > 1 ? "s" : ""}
+      </div>
+      <div className="flex gap-1.5">
+        <input type="date" value={due} onChange={(e) => { setDue(e.target.value); setPreview(null); }}
+          className="input !py-1 text-[11px]" />
+        <button onClick={() => call(false)} disabled={busy || due === task.due}
+          className="btn-ghost shrink-0 !py-1 text-[10.5px] disabled:opacity-40">
+          {busy ? <Loader2 size={11} className="animate-spin" /> : "Vista previa"}
+        </button>
+      </div>
+      {err && <p className="mt-1.5 text-[10.5px]" style={{ color: "var(--bad)" }}>{err}</p>}
+      {preview && (
+        <div className="mt-2 space-y-1">
+          <p className="text-[10.5px] font-semibold text-ink">
+            {preview.delta > 0 ? "+" : ""}{preview.delta} días · se corren {preview.shifts.length} tarea{preview.shifts.length !== 1 ? "s" : ""}:
+          </p>
+          {preview.shifts.map((s) => (
+            <div key={s.id} className="num flex items-baseline gap-2 rounded bg-surface px-2 py-1 text-[10px]">
+              <span className="font-bold text-cyan-deep">{s.id}</span>
+              <span className="min-w-0 flex-1 truncate text-ink-soft">{s.title}</span>
+              <span className="text-faint">{fmtDate(s.due)} → <b className="text-ink">{fmtDate(s.newDue)}</b></span>
+              <span style={{ color: s.newDeviation > 0 ? "var(--warn)" : "var(--ok)" }}>
+                {s.newDeviation > 0 ? "+" : ""}{s.newDeviation}d
+              </span>
+            </div>
+          ))}
+          <button onClick={() => call(true)} disabled={busy}
+            className="btn-primary w-full !py-1.5 text-[11px] disabled:opacity-40">
+            {busy ? <Loader2 size={11} className="animate-spin" /> : <CalendarRange size={11} />}
+            Aplicar corrimiento
+          </button>
+        </div>
+      )}
+      <p className="mt-1.5 text-[9px] text-faint">
+        Corre las dependientes no cerradas el mismo número de días. El deslizamiento se sigue midiendo contra la línea base.
+      </p>
     </div>
   );
 }
