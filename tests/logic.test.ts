@@ -201,3 +201,65 @@ test("executiveSummary es consistente con los catálogos", () => {
 test("DEMO_NOW_INDEX está en marzo de 2027", () => {
   assert.equal(DEMO_NOW_INDEX, 2027 * 12 + 2);
 });
+
+/* ─── instrumento de diagnóstico ─── */
+
+import { VARIABLES, variablesOf, cellFromVariables, DOMAINS } from "../src/data/instrument";
+import { SCORES, LINES as LINES_D, DIMENSIONS as DIMS_D, EVIDENCES } from "../src/data/demo";
+import { REG_CALIFICADOS, regCalStats } from "../src/data/regcal";
+import { RESPONSIBLES } from "../src/data/cmi";
+
+test("instrumento: el promedio de variables de cada celda coincide con el score vigente", () => {
+  for (const l of LINES_D) {
+    for (const d of DIMS_D) {
+      const derived = cellFromVariables(l.n, d.key);
+      assert.equal(derived, SCORES[l.n][d.key].value,
+        `celda ${l.code}×${d.key}: variables promedian ${derived}, score ${SCORES[l.n][d.key].value}`);
+    }
+  }
+});
+
+test("instrumento: toda celda tiene al menos 3 variables y 52 en total", () => {
+  assert.equal(VARIABLES.length, 52);
+  for (const l of LINES_D) for (const d of DIMS_D) {
+    assert.ok(variablesOf(l.n, d.key).length >= 3, `${l.code}×${d.key}`);
+  }
+});
+
+test("instrumento: variables con responsable válido, evidencias existentes y textos completos", () => {
+  const evIds = new Set(EVIDENCES.map((e) => e.id));
+  const respIds = new Set(RESPONSIBLES.map((r) => r.id));
+  for (const v of VARIABLES) {
+    assert.ok(respIds.has(v.ownerId), `${v.id}: responsable ${v.ownerId}`);
+    assert.ok(v.hallazgo.length > 40, `${v.id}: hallazgo corto`);
+    assert.ok(v.recomendacion.length > 30, `${v.id}: recomendación corta`);
+    assert.ok(v.value >= 1 && v.value <= 5 && v.target >= v.value - 1);
+    for (const e of v.evidenceIds) assert.ok(evIds.has(e), `${v.id}: evidencia ${e}`);
+  }
+});
+
+test("dominios: referencian variables, KPI e iniciativas existentes", () => {
+  const varIds = new Set(VARIABLES.map((v) => v.id));
+  const kpiCodes = new Set(KPI_CATALOG.map((k) => k.code));
+  const iniIds = new Set(INITIATIVES_FULL.map((i) => i.id));
+  assert.equal(DOMAINS.length, 6);
+  for (const d of DOMAINS) {
+    for (const v of d.variableIds) assert.ok(varIds.has(v), `${d.id}: variable ${v}`);
+    for (const k of d.kpiCodes) assert.ok(kpiCodes.has(k), `${d.id}: kpi ${k}`);
+    for (const i of d.initiativeIds) assert.ok(iniIds.has(i), `${d.id}: iniciativa ${i}`);
+    assert.ok(d.dataHighlights.length >= 3);
+  }
+});
+
+test("registros calificados: cobertura total del portafolio y estados coherentes", () => {
+  assert.equal(REG_CALIFICADOS.length, 33);
+  const s = regCalStats();
+  assert.equal(s.vigentes + s.porVencer + s.enRenovacion, 32); // 1 en trámite sin fecha
+  assert.ok(s.porVencer >= 4, "la ventana de renovación debe ser visible");
+  assert.equal(s.enRenovacion, 2);
+  // todo POR_VENCER vence de verdad dentro de la ventana
+  for (const r of REG_CALIFICADOS.filter((x) => x.estado === "POR_VENCER")) {
+    const [y, m] = r.vence.split("-").map(Number);
+    assert.ok(y * 12 + (m - 1) - (2027 * 12 + 2) <= 18, r.code);
+  }
+});

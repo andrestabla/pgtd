@@ -19,7 +19,7 @@ sistema de gestión, no como documento.
 
 | Código | Módulo | Estado |
 |---|---|---|
-| M1 | Medición de madurez — radar, heatmap 4×4, detalle con evidencia, escala de 5 niveles | ✅ |
+| M1 | Diagnóstico de madurez — 52 variables contra 8 referentes (eMM, D.1330, CNA, TOGAF, DAMA, INTEF, ISO 27001, CMI) con hallazgo/recomendación/evidencia, dominios diagnósticos y registros calificados | ✅ |
 | M2 | Comparación — pares, cuadrante de pertinencia, mapas de Colombia y Cesar (geometría oficial, filtro por subregión) | ✅ |
 | M3 | Capacidades — mapa estratégico navegable objetivo → capacidad → iniciativa → KPI | ✅ |
 | M4 | Indicadores — batería con serie, semáforo frente a meta, dueño y fuente | ✅ |
@@ -99,6 +99,11 @@ alertas y consistencia del resumen ejecutivo.
 - 3 ciclos de medición (48 celdas) con serie institucional 1,50 → 1,94
 - 18 KPI con ficha completa y series de hasta 8 cortes con notas
 - 14 iniciativas con 50 acciones, bitácoras y factores clasificados por riesgo
+- Instrumento de 52 variables (3–4 por celda) cuyo promedio ES el score de
+  celda (consistencia verificada por test), cada una con referente, hallazgo,
+  recomendación, responsable y evidencia
+- 33 registros calificados con resolución, vencimiento, estado y última
+  autoevaluación; 6 dominios diagnósticos transversales
 - 32 evidencias tipificadas con estado de verificación
 - Portafolio académico de 33 programas (13.374 estudiantes) por facultad,
   sede, modalidad, % de créditos virtuales, deserción, Saber Pro y equilibrio
