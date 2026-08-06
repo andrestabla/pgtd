@@ -9,13 +9,20 @@ import { MaturityRadar, ScoreGauge } from "@/components/charts";
 import {
   LINES, lineScore, institutionScore, PREV_SCORES, INITIATIVES, KPIS, fmtCOP,
 } from "@/data/demo";
-import { ArrowRight } from "lucide-react";
+import { buildAlerts, executiveSummary } from "@/lib/logic";
+import { ArrowRight, ShieldAlert, AlertTriangle, Info } from "lucide-react";
+
+const SEV_META = {
+  1: { icon: ShieldAlert, color: "var(--bad)", label: "Críticas" },
+  2: { icon: AlertTriangle, color: "var(--warn)", label: "Advertencias" },
+  3: { icon: Info, color: "var(--muted)", label: "Informativas" },
+} as const;
 
 export default function Panel() {
   const score = institutionScore();
   const prev = Object.values(PREV_SCORES).reduce((a, b) => a + b, 0) / 4;
-  const atRisk = INITIATIVES.flatMap((i) =>
-    i.factors.filter((f) => f.state === "ROJO").map((f) => ({ ini: i, factor: f })));
+  const alerts = buildAlerts();
+  const summary = executiveSummary();
   const budget = INITIATIVES.reduce(
     (a, i) => ({
       planned: a.planned + i.budgetPlanned,
@@ -23,18 +30,14 @@ export default function Panel() {
     }),
     { planned: 0, executed: 0 },
   );
-  const kpisOff = KPIS.filter((k) => {
-    const last = k.series[k.series.length - 1].value;
-    const first = k.series[0].value;
-    return k.goodDirection === "up" ? last < first : last > first;
-  });
+
 
   return (
     <>
       <PageHeader
         kicker="Universidad Popular del Cesar"
         title="Estado de la transformación digital"
-        desc="Medición vigente: Línea base · Fase 0 · publicada. La próxima re-medición está programada al cierre de la Fase 5."
+        desc={`Medición vigente: ${summary.maturity.assessment.label} (${summary.maturity.assessment.period}) · publicada. Serie institucional: ${summary.maturity.history.map((h) => h.institution.toFixed(2).replace(".", ",")).join(" → ")}.`}
       />
 
       {/* ── héroe: gauge + avance por línea ── */}
@@ -105,40 +108,38 @@ export default function Panel() {
           value={Math.round((budget.executed / budget.planned) * 100)} unit="%"
           foot={`${fmtCOP(budget.executed)} de ${fmtCOP(budget.planned)}`}
           accent="linear-gradient(90deg, var(--n4), var(--n5))" />
-        <StatCard label="Factores críticos en rojo" value={atRisk.length}
-          unit={atRisk.length === 1 ? "factor" : "factores"}
-          foot="Requieren conversación esta semana"
+        <StatCard label="Alertas del motor de seguimiento" value={summary.alertCounts.critical}
+          unit={`críticas · ${summary.alertCounts.warning} advertencias`}
+          foot={`${summary.actions.done}/${summary.actions.total} acciones completadas · ${summary.actions.late} vencidas`}
           accent="linear-gradient(90deg, var(--bad), #a13c44)" />
       </div>
 
-      {/* ── atención requerida ── */}
+      {/* ── alertas del motor de seguimiento ── */}
       <Card className="rise rise-3 mb-8">
-        <CardHeader title="Atención requerida"
-          sub="Factores en rojo e indicadores en dirección contraria a la meta" />
-        <div className="grid gap-x-6 px-4 pb-3 sm:grid-cols-2">
-          {atRisk.map(({ ini, factor }) => (
-            <Link key={ini.id + factor.name} href="/panel/iniciativas"
-              className="group flex items-center gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-surface-2">
-              <StateDot state="ROJO" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-bold text-ink">{factor.name}</div>
-                <div className="truncate text-[11.5px] text-muted">{ini.name}</div>
-              </div>
-              <ArrowRight size={14} className="shrink-0 text-faint transition-transform group-hover:translate-x-1" />
-            </Link>
-          ))}
-          {kpisOff.map((k) => (
-            <Link key={k.code} href="/panel/kpi"
-              className="group flex items-center gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-surface-2">
-              <StateDot state="AMBAR" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-bold text-ink">{k.name}</div>
-                <div className="truncate text-[11.5px] text-muted">Indicador en dirección contraria a la meta</div>
-              </div>
-              <ArrowRight size={14} className="shrink-0 text-faint transition-transform group-hover:translate-x-1" />
-            </Link>
-          ))}
+        <CardHeader title="Alertas del motor de seguimiento"
+          sub="Generadas por las reglas del marco conceptual: rachas en rojo, KPI contra meta, rezago de captura, proyección insuficiente, desalineación presupuestal y evidencia faltante" />
+        <div className="grid gap-x-6 px-4 pb-4 lg:grid-cols-2">
+          {alerts.slice(0, 10).map((al) => {
+            const meta = SEV_META[al.severity];
+            return (
+              <Link key={al.id} href={al.href}
+                className="group flex items-start gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-surface-2">
+                <meta.icon size={15} className="mt-0.5 shrink-0" style={{ color: meta.color }} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-bold text-ink">{al.title}</div>
+                  <div className="text-[11.5px] leading-snug text-muted">{al.detail}</div>
+                  {al.owner && <div className="num mt-0.5 text-[9.5px] text-faint">{al.owner}</div>}
+                </div>
+                <ArrowRight size={14} className="mt-0.5 shrink-0 text-faint transition-transform group-hover:translate-x-1" />
+              </Link>
+            );
+          })}
         </div>
+        {alerts.length > 10 && (
+          <div className="border-t border-line px-5 py-2.5 text-[11px] text-faint">
+            {alerts.length - 10} alertas más de menor severidad en los módulos correspondientes.
+          </div>
+        )}
       </Card>
 
       {/* ── módulos ── */}

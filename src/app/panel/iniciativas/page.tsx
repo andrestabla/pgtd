@@ -10,6 +10,11 @@ import { PageHeader, Card, StateDot, StatusChip, StatCard } from "@/components/u
 import { BudgetBar } from "@/components/charts";
 import { INITIATIVES, fmtCOP } from "@/data/demo";
 import { CMI_OBJECTIVES, responsible, type ActionStatus } from "@/data/cmi";
+import { initiativeRisk } from "@/lib/logic";
+
+const RISK_CLS: Record<string, string> = {
+  BAJO: "chip chip-ok", MEDIO: "chip", ALTO: "chip chip-warn", "CRÍTICO": "chip chip-bad",
+};
 import {
   ChevronDown, CircleCheck, CircleDashed, Circle, Flag, AlertTriangle,
   StickyNote, CalendarClock, User, Target,
@@ -68,6 +73,7 @@ export default function IniciativasPage() {
           const owner = responsible(i.ownerId);
           const cmiObj = CMI_OBJECTIVES.find((o) => o.id === i.cmi);
           const done = i.actions.filter((a) => a.status === "HECHA").length;
+          const risk = initiativeRisk(i);
           return (
             <Card key={i.id} className={`rise rise-${Math.min(idx + 1, 4)} overflow-hidden ${isOpen ? "ring-1 ring-cyan/40" : ""}`}>
               {/* cabecera */}
@@ -78,6 +84,9 @@ export default function IniciativasPage() {
                     <span className="text-[14.5px] font-extrabold tracking-tight text-ink">{i.name}</span>
                     <StatusChip status={i.status} />
                     <span className="chip">{i.subsistema}</span>
+                    <span className={RISK_CLS[risk.level]} title={risk.drivers.map((d) => d.text).join(" · ")}>
+                      Riesgo {risk.level.toLowerCase()} · {risk.score}
+                    </span>
                   </div>
                   <div className="num mt-1 text-[10.5px] text-faint">
                     {owner.dependencia} · {i.start} → {i.end} · acciones {done}/{i.actions.length}
@@ -166,6 +175,20 @@ export default function IniciativasPage() {
 
                     {/* factores + bitácora */}
                     <div>
+                      {risk.drivers.length > 0 && (
+                        <div className="mb-5">
+                          <div className="label mb-2.5">Motores del riesgo ({risk.score}/100)</div>
+                          <div className="space-y-1.5">
+                            {risk.drivers.map((d) => (
+                              <div key={d.text} className="flex items-center gap-2.5 rounded-lg bg-surface-2/60 px-3 py-2">
+                                <span className="chip shrink-0">{d.category}</span>
+                                <span className="flex-1 text-[11.5px] leading-snug text-ink-soft">{d.text}</span>
+                                <span className="num text-[10px] font-bold text-muted">+{d.weight}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <div className="label mb-3">Factores críticos de éxito</div>
                       <div className="space-y-1.5">
                         {i.factors.map((f) => (

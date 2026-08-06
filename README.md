@@ -56,6 +56,34 @@ Contraseña común: `pgtd-demo-2026`.
 `src/data/demo.ts` es la fuente única: alimenta la UI en modo demo y el seed,
 de modo que no hay divergencia entre ambos.
 
+## Arquitectura de lógica de negocio
+
+```
+docs/marco-conceptual.md      # traza literatura → reglas (9 artículos procesados)
+src/lib/logic.ts              # reglas puras: salud de KPI (semáforo, rezago de
+                              #   captura, proyección lineal a meta), riesgo
+                              #   compuesto de iniciativas (factores con racha,
+                              #   desalineación presupuesto↔avance, acciones
+                              #   vencidas, categorías BID), salud de objetivos
+                              #   CMI, rollup de madurez y motor de alertas
+src/app/api/td/               # API autenticada que expone la lógica:
+                              #   /summary /alerts /kpi /initiatives /portfolio
+```
+
+Las páginas consumen `logic.ts` directamente (server-side friendly) y la API
+expone lo mismo para clientes externos o para la migración a base de datos:
+al conectar Postgres solo cambia el origen de los datos, no las reglas.
+
+## Datos demo a escala
+
+- 3 ciclos de medición (48 celdas) con serie institucional 1,50 → 1,94
+- 18 KPI con ficha completa y series de hasta 8 cortes con notas
+- 14 iniciativas con 50 acciones, bitácoras y factores clasificados por riesgo
+- 32 evidencias tipificadas con estado de verificación
+- Portafolio académico de 33 programas (13.374 estudiantes) por facultad,
+  sede, modalidad, % de créditos virtuales, deserción, Saber Pro y equilibrio
+- Matrícula municipal en los 25 municipios del Cesar
+
 ## Estructura
 
 ```

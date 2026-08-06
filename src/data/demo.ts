@@ -34,33 +34,9 @@ export const LEVELS = [
   { n: 5, name: "Optimizado", color: "var(--n5)", desc: "Mejora continua sobre evidencia; analítica avanzada; capacidad de referente." },
 ] as const;
 
-// line → dimension → { value, target }
-export const SCORES: Record<number, Record<string, { value: number; target: number }>> = {
-  1: {
-    organizacional: { value: 2, target: 4 },
-    misional: { value: 3, target: 4 },
-    tecnologica: { value: 2, target: 4 },
-    datos: { value: 2, target: 3 },
-  },
-  2: {
-    organizacional: { value: 2, target: 3 },
-    misional: { value: 2, target: 4 },
-    tecnologica: { value: 3, target: 4 },
-    datos: { value: 1, target: 3 },
-  },
-  3: {
-    organizacional: { value: 3, target: 4 },
-    misional: { value: 2, target: 3 },
-    tecnologica: { value: 2, target: 3 },
-    datos: { value: 1, target: 3 },
-  },
-  4: {
-    organizacional: { value: 2, target: 4 },
-    misional: { value: 1, target: 3 },
-    tecnologica: { value: 2, target: 4 },
-    datos: { value: 1, target: 3 },
-  },
-};
+// line → dimension → { value, target } — derivado de la medición publicada vigente
+import { currentAssessment, previousAssessment } from "./cmi";
+export const SCORES = currentAssessment().scores!;
 
 export const lineScore = (n: number) => {
   const dims = Object.values(SCORES[n]);
@@ -73,8 +49,15 @@ export const lineTarget = (n: number) => {
 export const institutionScore = () =>
   LINES.reduce((a, l) => a + lineScore(l.n), 0) / LINES.length;
 
-// Medición anterior (para mostrar avance): ligera variación hacia abajo
-export const PREV_SCORES: Record<number, number> = { 1: 2.1, 2: 1.7, 3: 1.9, 4: 1.4 };
+// Medición anterior: promedio por línea del corte publicado previo
+export const PREV_SCORES: Record<number, number> = Object.fromEntries(
+  [1, 2, 3, 4].map((n) => {
+    const prev = previousAssessment();
+    if (!prev?.scores) return [n, lineScore(n)];
+    const dims = Object.values(prev.scores[n]);
+    return [n, dims.reduce((acc, d) => acc + d.value, 0) / dims.length];
+  }),
+);
 
 // Evidencias, KPI e iniciativas: la fuente detallada vive en ./cmi
 // (catálogo CMI, responsables, acciones y bitácora). Aquí se adaptan al

@@ -9,6 +9,7 @@ import { PageHeader, Card } from "@/components/ui";
 import { Sparkline } from "@/components/charts";
 import { KPIS, LINES, INITIATIVES, fmtNum } from "@/data/demo";
 import { CMI_OBJECTIVES, responsible } from "@/data/cmi";
+import { kpiHealth } from "@/lib/logic";
 import { X, User, Database, CalendarClock, Target, ListChecks, Sigma } from "lucide-react";
 
 export default function KpiPage() {
@@ -17,6 +18,7 @@ export default function KpiPage() {
 
   const list = lineFilter ? KPIS.filter((k) => k.line === lineFilter) : KPIS;
   const kpi = open ? KPIS.find((k) => k.code === open) : null;
+  const health = kpi ? kpiHealth(kpi) : null;
   const kpiObj = kpi ? CMI_OBJECTIVES.find((o) => o.id === kpi.cmi) : null;
   const kpiInis = kpi ? INITIATIVES.filter((i) => i.kpi === kpi.code) : [];
 
@@ -143,6 +145,31 @@ export default function KpiPage() {
                     </div>
                   </div>
                 </div>
+
+                {health && (
+                  <div className="mt-4 rounded-lg px-3.5 py-2.5"
+                    style={{
+                      background: health.projection.willReachTarget
+                        ? "color-mix(in srgb, var(--ok) 8%, white)"
+                        : "color-mix(in srgb, var(--warn) 10%, white)",
+                    }}>
+                    <div className="label !text-[8.5px]"
+                      style={{ color: health.projection.willReachTarget ? "var(--ok)" : "var(--warn)" }}>
+                      Proyección a dic-2028 (tendencia lineal de la serie)
+                    </div>
+                    <div className="mt-0.5 text-[12px] font-semibold leading-snug text-ink">
+                      Al ritmo actual llegaría a{" "}
+                      <b className="num">{fmtNum(health.projection.projectedAtTarget, 1)} {kpi.unit}</b>
+                      {" "}frente a la meta de <b className="num">{fmtNum(kpi.target, 1)}</b> —{" "}
+                      {health.projection.willReachTarget ? "la alcanza." : "no la alcanza: la iniciativa asociada debe acelerar."}
+                    </div>
+                    {health.isStale && (
+                      <div className="mt-1 text-[11px] font-semibold" style={{ color: "var(--bad)" }}>
+                        Dato rezagado: {health.staleBy} meses sobre la periodicidad declarada.
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {kpiObj && (
                   <Link href="/panel/capacidades"

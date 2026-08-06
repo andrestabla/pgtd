@@ -8,6 +8,7 @@ import {
   CAPABILITIES, KPIS, INITIATIVES, DEMO_USERS,
 } from "../src/data/demo";
 import { RESPONSIBLES, CMI_OBJECTIVES } from "../src/data/cmi";
+import { PROGRAMS } from "../src/data/portfolio";
 
 const prisma = new PrismaClient();
 
@@ -174,6 +175,15 @@ async function main() {
           })),
         },
       },
+    });
+  }
+
+  // portafolio académico
+  for (const p of PROGRAMS) {
+    await prisma.program.upsert({
+      where: { institutionId_code_campus: { institutionId: inst.id, code: p.code, campus: p.campus } },
+      update: {},
+      create: { ...p, institutionId: inst.id },
     });
   }
 

@@ -71,6 +71,28 @@ model CmiObjective {
   line        Int?
 }
 
+// ─── Portafolio académico ────────────────────────────────────────────────────
+
+model Program {
+  id             String  @id @default(cuid())
+  institutionId  String
+  code           String
+  name           String
+  level          String  // Pregrado | Tecnología | Especialización | Maestría
+  faculty        String
+  campus         String
+  modality       String  // Presencial | Híbrida | Virtual
+  students       Int
+  virtualCredits Int     // % de créditos con componente virtual
+  accredited     Boolean @default(false)
+  saberPro       Int?
+  dropout        Float
+  breakEven      Boolean @default(true)
+
+  @@unique([institutionId, code, campus])
+  @@index([institutionId, faculty])
+}
+
 // ─── Instrumento y mediciones de madurez ────────────────────────────────────
 
 model MaturityModel {
