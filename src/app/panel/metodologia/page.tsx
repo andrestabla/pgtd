@@ -11,6 +11,7 @@ import { PageHeader, Card, CardHeader, LevelBadge } from "@/components/ui";
 import { AccessChip } from "@/components/user-context";
 import { LINES, DIMENSIONS, LEVELS } from "@/data/demo";
 import { VARIABLES, DOMAINS, type Frame } from "@/data/instrument";
+import { DIK_ANCHORS, protocolStats, type EvidenceComponent } from "@/data/protocolo";
 import {
   IES_LEVELS, IIES_WEIGHTS, D7_META, PRACTICE_STATES, SAFEGUARDS,
 } from "@/lib/ies";
@@ -246,8 +247,60 @@ export default function MetodologiaPage() {
             <b> recomendación</b> (la acción que lo cierra), el nivel actual y la meta como insignias
             (<span className="mx-1 inline-flex align-middle"><LevelBadge level={2} /></span>),
             el responsable de la información, la evidencia de soporte, el estado de la práctica,
-            la percepción por grupo de actores y la puntuación IES de la variable
-            (ver <a href="#ies" className="font-bold text-cyan-deep">Índices IES</a>).
+            la percepción por grupo de actores, la puntuación IES de la variable
+            (ver <a href="#ies" className="font-bold text-cyan-deep">Índices IES</a>) y el
+            <b> protocolo de indagación</b> descrito a continuación.
+          </div>
+
+          {/* protocolo de indagación */}
+          <div id="protocolo" className="mt-6 scroll-mt-[74px]">
+            <div className="label mb-2">El protocolo de indagación: cómo se determina el nivel</div>
+            <p className="mb-3 text-[12.5px] leading-relaxed text-muted">
+              Cada variable declara tres cosas — el banco completo suma{" "}
+              <b className="text-ink">{protocolStats().items} ítems</b> y{" "}
+              <b className="text-ink">{protocolStats().evidenceRequests} solicitudes de evidencia</b>{" "}
+              sobre las {VARIABLES.length} variables:
+            </p>
+            <ol className="mb-4 list-decimal space-y-1.5 pl-5 text-[12.5px] leading-relaxed text-muted">
+              <li>
+                <b className="text-ink">Qué se indaga:</b> 2–4 ítems con su tipo (Likert 1–5,
+                verificación sí/no, dato, abierta) y su audiencia por grupo de actores
+                (Dir · Doc · Adm · Est · Ali). Los ítems Likert alimentan la percepción P;
+                nadie responde el banco completo — cada rol recibe su ruta.
+              </li>
+              <li>
+                <b className="text-ink">Qué evidencia se solicita:</b> una solicitud por componente
+                (Documentación, Implementación, Indicadores) con el criterio que debe cumplir para
+                puntuar alto. Lo entregado se califica 0–4 contra las anclas de abajo, y de ahí sale
+                E = 0,25·D + 0,35·I + 0,40·K.
+              </li>
+              <li>
+                <b className="text-ink">Rúbrica del nivel:</b> cinco descriptores anclados específicos
+                de la variable. El nivel 1–5 se asigna en sesión de calificación contrastando la
+                evidencia con la rúbrica — no es el redondeo de una fórmula.
+              </li>
+            </ol>
+            <div className="grid gap-3 lg:grid-cols-3">
+              {(Object.keys(DIK_ANCHORS) as EvidenceComponent[]).map((c) => {
+                const a = DIK_ANCHORS[c];
+                return (
+                  <div key={c} className="rounded-xl bg-surface-2/70 px-4 py-3">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[12px] font-extrabold text-ink">{a.label} ({c})</span>
+                      <span className="text-[10px] italic text-faint">{a.question}</span>
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {a.levels.map((lv, i) => (
+                        <div key={i} className="flex items-start gap-2 text-[11px] leading-snug text-muted">
+                          <span className="num mt-px w-3 shrink-0 font-extrabold text-cyan-deep">{i}</span>
+                          {lv}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </Section>
 

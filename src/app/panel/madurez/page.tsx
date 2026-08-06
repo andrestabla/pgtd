@@ -16,6 +16,7 @@ import { ASSESSMENTS, responsible } from "@/data/cmi";
 import {
   VARIABLES, variablesOf, gapOf, DOMAINS, domainScore, type Variable, type Frame,
 } from "@/data/instrument";
+import { protocolOf, DIK_ANCHORS, ITEM_TYPE_LABEL } from "@/data/protocolo";
 import { REG_CALIFICADOS, regCalStats, programOf } from "@/data/regcal";
 import {
   iesSummary, P as pIES, E as eIES, S as sIES, gapReading, IES_LEVELS, levelOf,
@@ -26,6 +27,7 @@ import { KPIS, INITIATIVES } from "@/data/demo";
 import {
   FileText, X, CheckCircle2, Clock3, History, ChevronDown, BookOpenCheck,
   Search, Lightbulb, AlertCircle, Layers, ScrollText, Sigma, ShieldAlert, HelpCircle,
+  ClipboardList,
 } from "lucide-react";
 
 const LEVEL_BG = ["", "var(--n1)", "var(--n2)", "var(--n3)", "var(--n4)", "var(--n5)"];
@@ -828,6 +830,7 @@ function VariableRow({ v, idx, open, onToggle }: {
       </button>
 
       {open && (
+        <>
         <div className="grid gap-5 border-t border-line px-5 py-4 lg:grid-cols-2">
           <div>
             <p className="mb-3 text-[12.5px] leading-relaxed text-muted">{v.desc}</p>
@@ -923,7 +926,122 @@ function VariableRow({ v, idx, open, onToggle }: {
             </div>
           </div>
         </div>
+        <ProtocolBlock v={v} />
+        </>
       )}
     </Card>
+  );
+}
+
+/* ─── protocolo de indagación de la variable ─── */
+
+const AUD_SHORT: Record<string, string> = {
+  directivos: "Dir", docentes: "Doc", administrativos: "Adm",
+  estudiantes: "Est", aliados: "Ali",
+};
+const AUD_FULL: Record<string, string> = {
+  directivos: "Gobierno y directivos", docentes: "Docentes e investigadores",
+  administrativos: "Personal profesional y administrativo", estudiantes: "Estudiantes",
+  aliados: "Egresados y actores externos",
+};
+
+function ProtocolBlock({ v }: { v: Variable }) {
+  const proto = protocolOf(v.id);
+  if (!proto) return null;
+  const compScore: Record<"D" | "I" | "K", number> = {
+    D: v.evidence.d, I: v.evidence.i, K: v.evidence.k,
+  };
+  return (
+    <div className="border-t border-line bg-surface-2/40 px-5 py-4">
+      <div className="mb-3 flex items-center gap-2">
+        <ClipboardList size={13} className="text-cyan-deep" />
+        <span className="text-[12px] font-extrabold uppercase tracking-[0.08em] text-ink">
+          Protocolo · cómo se determina el nivel
+        </span>
+        <span className="text-[10.5px] text-faint">
+          los ítems capturan la percepción · la evidencia puntúa D/I/K · la rúbrica ancla el nivel
+        </span>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        {/* 1 · ítems */}
+        <div>
+          <div className="label mb-2 !text-[8px]">1 · Qué se indaga</div>
+          <div className="space-y-1.5">
+            {proto.items.map((it, i) => (
+              <div key={i} className="rounded-lg bg-surface px-3 py-2 shadow-sm">
+                <p className="text-[11.5px] leading-snug text-ink-soft">{it.text}</p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                  <span className="chip chip-cyan !py-0 !text-[8px]">{ITEM_TYPE_LABEL[it.type]}</span>
+                  {it.audiences.map((a) => (
+                    <span key={a} className="chip !py-0 !text-[8px]" title={AUD_FULL[a]}>{AUD_SHORT[a]}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 2 · evidencia D/I/K */}
+        <div>
+          <div className="label mb-2 !text-[8px]">2 · Evidencia que se solicita</div>
+          <div className="space-y-1.5">
+            {proto.evidence.map((e, i) => {
+              const score = compScore[e.component];
+              const anchor = DIK_ANCHORS[e.component];
+              const color = score >= 3 ? "var(--ok)" : score >= 2 ? "var(--warn)" : "var(--bad)";
+              return (
+                <div key={i} className="rounded-lg bg-surface px-3 py-2 shadow-sm">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-[11px] font-bold text-ink">
+                      {anchor.label} <span className="num text-[9px] text-faint">({e.component})</span>
+                    </span>
+                    <span className="num shrink-0 text-[11px] font-extrabold" style={{ color }}>
+                      {score}/4
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[11px] leading-snug text-muted">{e.what}</p>
+                  <p className="mt-1 text-[10px] leading-snug text-faint">
+                    <b>Criterio para 3–4:</b> {e.criterio}
+                  </p>
+                  <p className="mt-0.5 text-[10px] italic leading-snug" style={{ color }}>
+                    Obtenido: {anchor.levels[score]?.toLowerCase()}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 3 · rúbrica */}
+        <div>
+          <div className="label mb-2 !text-[8px]">3 · Rúbrica del nivel (calificación en sesión)</div>
+          <div className="space-y-1.5">
+            {proto.rubric.map((r, i) => {
+              const lvl = i + 1;
+              const isCur = lvl === v.value;
+              const isTarget = lvl === v.target;
+              return (
+                <div key={i}
+                  className={`flex items-start gap-2 rounded-lg px-3 py-1.5 ${isCur ? "" : "bg-surface shadow-sm"}`}
+                  style={isCur ? { background: LEVEL_BG[lvl] } : undefined}>
+                  <span className="num mt-px shrink-0 text-[10.5px] font-extrabold"
+                    style={{ color: isCur ? "rgba(255,255,255,.85)" : LEVEL_BG[lvl] }}>
+                    {lvl}
+                  </span>
+                  <p className={`flex-1 text-[10.5px] leading-snug ${isCur ? "text-white" : "text-muted"}`}>{r}</p>
+                  {isCur && (
+                    <span className="shrink-0 rounded-full bg-white/25 px-1.5 py-0.5 text-[8px] font-bold text-white">
+                      ACTUAL
+                    </span>
+                  )}
+                  {isTarget && !isCur && <span className="chip chip-gold shrink-0 !py-0 !text-[8px]">Meta</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
