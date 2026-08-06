@@ -6,6 +6,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PageHeader, Card } from "@/components/ui";
+import { AccessChip } from "@/components/user-context";
 import { Sparkline } from "@/components/charts";
 import { KPIS, LINES, INITIATIVES, fmtNum } from "@/data/demo";
 import { CMI_OBJECTIVES, responsible } from "@/data/cmi";
@@ -25,7 +26,7 @@ export default function KpiPage() {
   return (
     <>
       <PageHeader kicker="M4 · Indicadores" title="Indicadores de la educación digital"
-        desc="Cada indicador declara su definición operativa, su fórmula, quién produce el dato y con qué frecuencia. Clic en una tarjeta para abrir la ficha completa." />
+        desc="Cada indicador declara su definición operativa, su fórmula, quién produce el dato y con qué frecuencia. Clic en una tarjeta para abrir la ficha completa."  actions={<AccessChip module="kpi" />} />
 
       <div className="rise mb-5 flex flex-wrap gap-2">
         <button onClick={() => setLineFilter(null)}

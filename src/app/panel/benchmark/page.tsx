@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { PageHeader, Card, CardHeader } from "@/components/ui";
+import { AccessChip } from "@/components/user-context";
 import { ColombiaMap, CesarMap, PeerBars, PertinenceQuadrant, ColombiaImpactMap } from "@/components/charts";
 import {
   MUNI_IMPACT, LENS_META, type MapLens, NATIONAL_IMPACT, INTERNATIONAL_IMPACT,
@@ -34,7 +35,7 @@ export default function BenchmarkPage() {
   return (
     <>
       <PageHeader kicker="M2 · Comparación" title="Posición sectorial y territorio"
-        desc="Tres cortes: nacional, pares comparables y la cobertura municipal del Cesar. El benchmark responde la pregunta que sigue a todo diagnóstico: ¿esto es bueno o malo comparado con quién?" />
+        desc="Tres cortes: nacional, pares comparables y la cobertura municipal del Cesar. El benchmark responde la pregunta que sigue a todo diagnóstico: ¿esto es bueno o malo comparado con quién?" actions={<AccessChip module="benchmark" />} />
 
       <div className="mb-5 grid gap-5 lg:grid-cols-2">
         <Card className="rise rise-1">

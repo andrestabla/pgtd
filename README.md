@@ -79,6 +79,33 @@ Las páginas consumen `logic.ts` directamente (server-side friendly) y la API
 expone lo mismo para clientes externos o para la migración a base de datos:
 al conectar Postgres solo cambia el origen de los datos, no las reglas.
 
+## Permisos (RBAC)
+
+Matriz central en `src/lib/permissions.ts` — el servidor la exige (403/422
+con explicación) y la UI la refleja (chip de acceso en cada módulo,
+controles solo donde hay permiso):
+
+| Acción | Consultor | Líder | Responsable | Directivo |
+|---|:--:|:--:|:--:|:--:|
+| Ver módulos | ✅ | ✅ | ✅ | ✅ |
+| Editar tareas del gestor | ✅ | ✅ | solo su línea | — |
+| Editar iniciativas | ✅ | ✅ | solo su línea | — |
+| Reportar valores de KPI | ✅ | ✅ | solo su línea | — |
+| Capturar celdas de medición | ✅ | — | solo su línea | — |
+| Publicar mediciones / configurar instrumento | ✅ | — | — | — |
+| Verificar evidencia | ✅ | — | — | — |
+
+Reglas de negocio en mutaciones: cerrar una tarea que exige evidencia sin
+soporte → 422; bloquear sin motivo → 422; compromiso anterior al inicio →
+422. Toda mutación escribe auditoría (quién, cuándo, qué cambió).
+
+## Escritura: memoria + write-through
+
+`src/server/store.ts`: las mutaciones viven en memoria (modo demo) y se
+persisten vía Prisma cuando `DATABASE_URL` está configurada, con hidratación
+al arrancar. Conectar Neon/Postgres no cambia ninguna regla — solo el origen.
+`POST /api/td/reset` (solo consultor) restablece la demo.
+
 ## Vista pública de solo lectura
 
 El botón «Vista pública» de la topbar genera un enlace firmado (HMAC del

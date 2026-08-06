@@ -512,3 +512,85 @@ test("proyectos: carga por persona y estadísticas del portafolio consistentes",
   assert.equal(Object.values(s.byStatus).reduce((a, b) => a + b, 0), s.total);
   assert.ok(DEMO_TODAY.startsWith("2027-03"), "hoy demo coherente con DEMO_NOW_INDEX");
 });
+
+/* ─── permisos y store de escritura ─── */
+
+import { can, describeAccess, MODULE_ACTIONS, PERMISSION_MATRIX, type ModuleKey } from "../src/lib/permissions";
+import { updateTask, verifyEvidence, getTask, getAudit, resetStore } from "../src/server/store";
+import type { SessionUser } from "../src/lib/session";
+
+const U = {
+  consultor: { email: "c@a", name: "Consultor Test", role: "CONSULTOR" } as SessionUser,
+  lider: { email: "l@u", name: "Líder Test", role: "LIDER" } as SessionUser,
+  resp1: { email: "r@u", name: "Responsable L1", role: "RESPONSABLE", line: 1 } as SessionUser,
+  directivo: { email: "d@u", name: "Directivo Test", role: "DIRECTIVO" } as SessionUser,
+};
+
+test("permisos: la matriz cubre todos los módulos y todos los roles", () => {
+  const modules: ModuleKey[] = ["panel", "madurez", "benchmark", "capacidades", "kpi", "ruta", "iniciativas", "proyectos", "bi"];
+  for (const m of modules) {
+    assert.ok(MODULE_ACTIONS[m].includes("view"), m);
+    for (const u of Object.values(U)) {
+      const acc = describeAccess(u, m);
+      assert.ok(["read", "line", "full"].includes(acc.level), `${m}/${u.role}`);
+    }
+  }
+  // toda acción define los 4 roles
+  for (const [action, grants] of Object.entries(PERMISSION_MATRIX)) {
+    assert.equal(Object.keys(grants).length, 4, action);
+  }
+});
+
+test("permisos: reglas clave de la matriz", () => {
+  assert.ok(can(U.consultor, "publish_maturity"));
+  assert.ok(!can(U.lider, "publish_maturity"), "el líder no configura el instrumento");
+  assert.ok(!can(U.lider, "verify_evidence"), "verificar evidencia es del consultor");
+  assert.ok(can(U.resp1, "edit_tasks", 1) && !can(U.resp1, "edit_tasks", 4), "ámbito de línea");
+  assert.ok(!can(U.directivo, "edit_tasks") && can(U.directivo, "view"), "directivo solo lee");
+  assert.ok(!can(null, "view"), "sin sesión no hay acceso");
+});
+
+test("store: mutaciones exigen permiso y reglas de negocio", async () => {
+  resetStore();
+  // directivo no edita
+  const r1 = await updateTask(U.directivo, "T-i1-06", { status: "HECHA" });
+  assert.ok(!r1.ok && r1.status === 403);
+  // responsable fuera de su línea no edita
+  const r2 = await updateTask(U.resp1, "T-i2-04", { status: "EN_REVISION" });
+  assert.ok(!r2.ok && r2.status === 403 && r2.error.includes("4.4"));
+  // cerrar sin evidencia exigida → 422
+  const r3 = await updateTask(U.consultor, "T-i1-10", { status: "HECHA" });
+  assert.ok(!r3.ok && r3.status === 422 && r3.error.includes("evidencia"));
+  // bloquear sin motivo → 422
+  const r4 = await updateTask(U.consultor, "T-i2-05", { status: "BLOQUEADA" });
+  assert.ok(!r4.ok && r4.status === 422);
+  // compromiso anterior al inicio → 422
+  const r5 = await updateTask(U.consultor, "T-i1-09", { due: "2027-01-01" });
+  assert.ok(!r5.ok && r5.status === 422);
+  resetStore();
+});
+
+test("store: mutación válida cambia el estado y escribe auditoría", async () => {
+  resetStore();
+  const before = getAudit("T-i1-09").length;
+  const r = await updateTask(U.resp1, "T-i1-09", { status: "EN_CURSO", due: "2027-04-18" });
+  assert.ok(r.ok);
+  const t = getTask("T-i1-09")!;
+  assert.equal(t.status, "EN_CURSO");
+  assert.equal(t.due, "2027-04-18");
+  const log = getAudit("T-i1-09");
+  assert.equal(log.length, before + 1);
+  assert.ok(log[0].change.includes("EN_CURSO") && log[0].change.includes("2027-04-18"));
+  assert.equal(log[0].actor, "Responsable L1");
+  resetStore();
+});
+
+test("store: verificación de evidencia solo por consultor y auditada", async () => {
+  resetStore();
+  const denied = await verifyEvidence(U.lider, "EV-02");
+  assert.ok(!denied.ok && denied.status === 403);
+  const ok = await verifyEvidence(U.consultor, "EV-02");
+  assert.ok(ok.ok && ok.status === "VERIFICADA");
+  assert.ok(getAudit("EV-02").some((a) => a.change.includes("verificada")));
+  resetStore();
+});

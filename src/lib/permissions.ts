@@ -1,0 +1,95 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// PGTD · Matriz central de permisos (RBAC).
+// Única fuente de verdad de quién puede qué, por módulo y por acción.
+// Se aplica en dos capas: el servidor la EXIGE en cada mutación (403) y la
+// UI la REFLEJA (controles ocultos o deshabilitados + chip de acceso).
+//
+// Roles:
+//  CONSULTOR   — equipo Algoritmo T: configura el instrumento, publica
+//                mediciones, verifica evidencia. Edición completa.
+//  LIDER       — líder institucional: administra iniciativas, tareas y KPI
+//                de todas las líneas. No configura el instrumento.
+//  RESPONSABLE — responsable de línea: edita lo de SU línea (tareas de sus
+//                iniciativas, avance, evidencia propia) y reporta KPI suyos.
+//  DIRECTIVO   — Rectoría/Consejo: lectura de todo, edición de nada.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { SessionUser } from "@/lib/session";
+
+export type ModuleKey =
+  | "panel" | "madurez" | "benchmark" | "capacidades"
+  | "kpi" | "ruta" | "iniciativas" | "proyectos" | "bi";
+
+export type Action =
+  | "view"              // ver el módulo
+  | "edit_tasks"        // crear/editar/mover tareas del gestor
+  | "edit_initiatives"  // avance, factores, bitácora de iniciativas
+  | "report_kpi"        // registrar valores de KPI
+  | "capture_maturity"  // capturar celdas de una medición en curso
+  | "publish_maturity"  // publicar mediciones / configurar el instrumento
+  | "verify_evidence"   // marcar evidencia como VERIFICADA
+  | "manage_users";     // administrar usuarios y permisos
+
+export type Role = SessionUser["role"];
+
+// nivel de acceso: false = no · true = total · "line" = solo su línea
+type Grant = boolean | "line";
+
+const MATRIX: Record<Action, Record<Role, Grant>> = {
+  view:             { CONSULTOR: true, LIDER: true, RESPONSABLE: true, DIRECTIVO: true },
+  edit_tasks:       { CONSULTOR: true, LIDER: true, RESPONSABLE: "line", DIRECTIVO: false },
+  edit_initiatives: { CONSULTOR: true, LIDER: true, RESPONSABLE: "line", DIRECTIVO: false },
+  report_kpi:       { CONSULTOR: true, LIDER: true, RESPONSABLE: "line", DIRECTIVO: false },
+  capture_maturity: { CONSULTOR: true, LIDER: false, RESPONSABLE: "line", DIRECTIVO: false },
+  publish_maturity: { CONSULTOR: true, LIDER: false, RESPONSABLE: false, DIRECTIVO: false },
+  verify_evidence:  { CONSULTOR: true, LIDER: false, RESPONSABLE: false, DIRECTIVO: false },
+  manage_users:     { CONSULTOR: true, LIDER: false, RESPONSABLE: false, DIRECTIVO: false },
+};
+
+/** ¿Puede el usuario ejecutar la acción? `line` restringe al ámbito de su línea. */
+export function can(user: SessionUser | null, action: Action, line?: number): boolean {
+  if (!user) return false;
+  const grant = MATRIX[action][user.role];
+  if (grant === true) return true;
+  if (grant === "line") {
+    if (line === undefined) return true;        // capacidad general (la UI muestra el control)
+    return user.line === line;                   // recurso concreto: debe ser su línea
+  }
+  return false;
+}
+
+/** Acciones relevantes por módulo (para el chip de acceso y la documentación). */
+export const MODULE_ACTIONS: Record<ModuleKey, Action[]> = {
+  panel:        ["view"],
+  madurez:      ["view", "capture_maturity", "publish_maturity", "verify_evidence"],
+  benchmark:    ["view"],
+  capacidades:  ["view", "edit_initiatives"],
+  kpi:          ["view", "report_kpi"],
+  ruta:         ["view", "edit_initiatives"],
+  iniciativas:  ["view", "edit_initiatives", "edit_tasks"],
+  proyectos:    ["view", "edit_tasks", "verify_evidence"],
+  bi:           ["view"],
+};
+
+/** Descripción del acceso del usuario a un módulo, para mostrar en la UI. */
+export function describeAccess(user: SessionUser | null, module: ModuleKey): {
+  level: "none" | "read" | "line" | "full";
+  label: string;
+} {
+  if (!user) return { level: "none", label: "Sin acceso" };
+  const actions = MODULE_ACTIONS[module].filter((a) => a !== "view");
+  if (actions.length === 0) {
+    return { level: "read", label: "Lectura" };
+  }
+  const grants = actions.map((a) => MATRIX[a][user.role]);
+  if (grants.every((g) => g === false)) return { level: "read", label: "Lectura" };
+  if (grants.some((g) => g === true) && grants.every((g) => g !== "line")) {
+    return { level: "full", label: "Edición completa" };
+  }
+  if (grants.some((g) => g === true)) return { level: "full", label: "Edición completa" };
+  const lineName = user.line ? `línea 4.${user.line}` : "tu línea";
+  return { level: "line", label: `Edición de ${lineName}` };
+}
+
+/** Resumen de la matriz para documentación/pruebas. */
+export const PERMISSION_MATRIX = MATRIX;

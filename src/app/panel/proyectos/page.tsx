@@ -1,26 +1,43 @@
 "use client";
 
-// GP · Gestor de proyectos: el roadmap traducido a tareas concretas con
-// fechas, responsables con nombre propio, dependencias, evidencia por
-// entregable y alertas. Tres vistas: tablero, cronograma y personas.
+// GP · Gestor de proyectos — Fase 1 con escritura real.
+// Los datos vienen del store del servidor (memoria + write-through a
+// Postgres); las mutaciones pasan por la matriz de permisos y las reglas de
+// negocio (403/422 con explicación). La UI refleja lo que el servidor exige:
+// controles de edición solo donde `editable[task]` lo permite.
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader, Card, CardHeader, StatCard } from "@/components/ui";
+import { AccessChip, useUser } from "@/components/user-context";
 import { INITIATIVES, EVIDENCES } from "@/data/demo";
 import {
-  TASKS, PEOPLE, person, initials, isOverdue, dueSoon, DEMO_TODAY,
-  TASK_STATUS_META, type Task, type TaskStatus,
+  initials, isOverdue as isOverdueFn, dueSoon as dueSoonFn, DEMO_TODAY,
+  TASK_STATUS_META, type Task, type TaskStatus, type Person,
 } from "@/data/proyectos";
-import { taskAlerts, workload, portfolioTaskStats } from "@/lib/proyectos";
+import type { TaskAlert, Workload } from "@/lib/proyectos";
 import {
-  KanbanSquare, CalendarRange, Users, X, Link2, FileText, CalendarClock,
-  AlertTriangle, Lock, ChevronRight,
+  KanbanSquare, CalendarRange, Users, X, Link2, FileText, ShieldCheck,
+  AlertTriangle, Lock, ChevronRight, Loader2, Save, History,
 } from "lucide-react";
 
 type View = "tablero" | "cronograma" | "personas";
-
 const COLUMNS: TaskStatus[] = ["POR_HACER", "EN_CURSO", "EN_REVISION", "BLOQUEADA", "HECHA"];
+
+type ApiData = {
+  tasks: Task[];
+  people: Person[];
+  alerts: TaskAlert[];
+  workload: Workload[];
+  stats: {
+    total: number; byStatus: Record<TaskStatus, number>;
+    overdue: number; dueSoon: number; withEvidence: number; people: number;
+  };
+  audit: { id: number; at: string; actor: string; role: string; entity: string; entityId: string; change: string }[];
+  editable: Record<string, boolean>;
+  canVerifyEvidence: boolean;
+  evidenceStatus: Record<string, "VERIFICADA" | "PENDIENTE">;
+};
 
 const fmtDate = (iso: string) => {
   const [y, m, d] = iso.split("-");
@@ -28,7 +45,6 @@ const fmtDate = (iso: string) => {
   return `${Number(d)} ${MES[Number(m) - 1]} ${y.slice(2)}`;
 };
 
-// meses del cronograma: ago-2026 → ago-2027
 const MONTHS = Array.from({ length: 13 }, (_, i) => {
   const y = 2026 + Math.floor((7 + i) / 12);
   const m = ((7 + i) % 12) + 1;
@@ -36,73 +52,133 @@ const MONTHS = Array.from({ length: 13 }, (_, i) => {
 });
 const monthIndex = (iso: string) => {
   const [y, m] = iso.split("-").map(Number);
-  return (y - 2026) * 12 + (m - 1) - 7; // 0 = ago-2026
+  return (y - 2026) * 12 + (m - 1) - 7;
 };
 
 export default function ProyectosPage() {
+  const user = useUser();
   const [view, setView] = useState<View>("tablero");
+  const [data, setData] = useState<ApiData | null>(null);
   const [iniFilter, setIniFilter] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("ini");
   });
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   const [openTask, setOpenTask] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const stats = portfolioTaskStats();
-  const alerts = taskAlerts();
+  const refetch = useCallback(async () => {
+    const res = await fetch("/api/td/tasks");
+    if (res.ok) setData(await res.json());
+  }, []);
+  useEffect(() => { refetch(); }, [refetch]);
+
+  const patchTask = useCallback(async (id: string, patch: Record<string, unknown>) => {
+    setSaving(true); setError(null);
+    const res = await fetch(`/api/td/tasks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? `Error ${res.status}`);
+    } else {
+      await refetch();
+    }
+    setSaving(false);
+  }, [refetch]);
+
+  const verifyEv = useCallback(async (id: string) => {
+    setSaving(true); setError(null);
+    const res = await fetch(`/api/td/evidence/${id}`, { method: "PATCH" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? `Error ${res.status}`);
+    } else {
+      await refetch();
+    }
+    setSaving(false);
+  }, [refetch]);
+
+  const tasks = useMemo(() => data?.tasks ?? [], [data]);
+  const personOf = useCallback(
+    (id: string) => data?.people.find((p) => p.id === id) ?? null, [data]);
 
   const filtered = useMemo(() => {
-    let list = TASKS;
+    let list = tasks;
     if (iniFilter) list = list.filter((t) => t.iniId === iniFilter);
     if (personFilter) list = list.filter((t) => t.assigneeId === personFilter);
     return list;
-  }, [iniFilter, personFilter]);
+  }, [tasks, iniFilter, personFilter]);
 
-  const task = openTask ? TASKS.find((t) => t.id === openTask) : null;
+  const task = openTask ? tasks.find((t) => t.id === openTask) ?? null : null;
+
+  if (!data) {
+    return (
+      <div className="grid min-h-[50vh] place-items-center">
+        <span className="flex items-center gap-2 text-[13px] text-muted">
+          <Loader2 size={16} className="animate-spin" /> Cargando el plan de trabajo…
+        </span>
+      </div>
+    );
+  }
 
   return (
     <>
       <PageHeader kicker="GP · Gestor de proyectos" title="Plan de trabajo del portafolio"
-        desc={`Las ${INITIATIVES.length} iniciativas del roadmap traducidas a ${TASKS.length} tareas con fechas, responsables con nombre propio, dependencias y evidencia por entregable. Hoy (demo): ${fmtDate(DEMO_TODAY)}.`}
+        desc={`${data.stats.total} tareas en ${INITIATIVES.length} iniciativas · las mutaciones pasan por la matriz de permisos del servidor. Hoy (demo): ${fmtDate(DEMO_TODAY)}.`}
         actions={
-          <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
-            {([["tablero", KanbanSquare, "Tablero"], ["cronograma", CalendarRange, "Cronograma"], ["personas", Users, "Personas"]] as const).map(([v, Icon, label]) => (
-              <button key={v} onClick={() => setView(v)}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-all ${
-                  view === v ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"}`}>
-                <Icon size={13} className={view === v ? "text-cyan-deep" : ""} />
-                {label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <AccessChip module="proyectos" />
+            <div className="flex gap-1 rounded-xl bg-surface-2 p-1">
+              {([["tablero", KanbanSquare, "Tablero"], ["cronograma", CalendarRange, "Cronograma"], ["personas", Users, "Personas"]] as const).map(([v, Icon, label]) => (
+                <button key={v} onClick={() => setView(v)}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-all ${
+                    view === v ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"}`}>
+                  <Icon size={13} className={view === v ? "text-cyan-deep" : ""} />
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         } />
 
+      {/* error de mutación (403/422 explicado por el servidor) */}
+      {error && (
+        <div className="rise mb-4 flex items-start gap-2.5 rounded-xl px-4 py-3"
+          style={{ background: "color-mix(in srgb, var(--bad) 8%, white)" }}>
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" style={{ color: "var(--bad)" }} />
+          <p className="flex-1 text-[12.5px] leading-relaxed text-ink-soft">{error}</p>
+          <button onClick={() => setError(null)} className="text-faint hover:text-ink"><X size={14} /></button>
+        </div>
+      )}
+
       {/* métricas */}
       <div className="rise rise-1 mb-5 grid gap-4 sm:grid-cols-4">
-        <StatCard label="Tareas del portafolio" value={stats.total}
+        <StatCard label="Tareas del portafolio" value={data.stats.total}
           unit={`en ${INITIATIVES.length} iniciativas`}
-          foot={`${stats.byStatus.HECHA} hechas · ${stats.byStatus.EN_CURSO + stats.byStatus.EN_REVISION} activas`} />
-        <StatCard label="Vencidas" value={stats.overdue} unit="tareas"
+          foot={`${data.stats.byStatus.HECHA} hechas · ${data.stats.byStatus.EN_CURSO + data.stats.byStatus.EN_REVISION} activas`} />
+        <StatCard label="Vencidas" value={data.stats.overdue} unit="tareas"
           foot="Fecha compromiso superada sin cierre"
           accent="linear-gradient(90deg, var(--bad), #a13c44)" />
-        <StatCard label="Vencen en 14 días" value={stats.dueSoon} unit="tareas"
+        <StatCard label="Vencen en 14 días" value={data.stats.dueSoon} unit="tareas"
           foot="La ventana de gestión de esta quincena"
           accent="linear-gradient(90deg, var(--warn), var(--gold))" />
-        <StatCard label="Con evidencia adjunta" value={stats.withEvidence}
-          unit={`de ${TASKS.filter((t) => t.requiresEvidence).length} exigidas`}
-          foot={`${stats.people} personas con tareas asignadas`}
+        <StatCard label="Con evidencia adjunta" value={data.stats.withEvidence}
+          unit={`de ${tasks.filter((t) => t.requiresEvidence).length} exigidas`}
+          foot={`${data.stats.people} personas con tareas asignadas`}
           accent="linear-gradient(90deg, var(--n4), var(--n5))" />
       </div>
 
-      {/* alertas de tareas */}
-      {alerts.length > 0 && (
+      {/* alertas */}
+      {data.alerts.length > 0 && (
         <div className="rise rise-2 mb-5 flex flex-wrap gap-2">
-          {alerts.slice(0, 4).map((a) => (
+          {data.alerts.slice(0, 4).map((a) => (
             <button key={a.id} onClick={() => setOpenTask(a.taskId)}
               className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-[11.5px] transition-transform hover:-translate-y-0.5"
-              style={{
-                background: a.severity === 1 ? "color-mix(in srgb, var(--bad) 9%, white)" : "color-mix(in srgb, var(--warn) 10%, white)",
-              }}>
+              style={{ background: a.severity === 1 ? "color-mix(in srgb, var(--bad) 9%, white)" : "color-mix(in srgb, var(--warn) 10%, white)" }}>
               {a.kind === "TAREA_BLOQUEADA"
                 ? <Lock size={12} style={{ color: "var(--bad)" }} />
                 : <AlertTriangle size={12} style={{ color: a.severity === 1 ? "var(--bad)" : "var(--warn)" }} />}
@@ -110,8 +186,8 @@ export default function ProyectosPage() {
               <span className="num text-[10px] text-muted">{a.ownerName.split(" ")[0]}</span>
             </button>
           ))}
-          {alerts.length > 4 && (
-            <span className="self-center text-[11px] text-faint">+{alerts.length - 4} más en el panel</span>
+          {data.alerts.length > 4 && (
+            <span className="self-center text-[11px] text-faint">+{data.alerts.length - 4} más en el panel</span>
           )}
         </div>
       )}
@@ -122,15 +198,14 @@ export default function ProyectosPage() {
           className={`chip cursor-pointer ${iniFilter === null ? "chip-cyan" : ""}`}>
           Todas las iniciativas
         </button>
-        {INITIATIVES.filter((i) => TASKS.some((t) => t.iniId === i.id)).map((i) => (
+        {INITIATIVES.filter((i) => tasks.some((t) => t.iniId === i.id)).map((i) => (
           <button key={i.id} onClick={() => setIniFilter(iniFilter === i.id ? null : i.id)}
-            className={`chip cursor-pointer ${iniFilter === i.id ? "chip-cyan" : ""}`}
-            title={i.name}>
+            className={`chip cursor-pointer ${iniFilter === i.id ? "chip-cyan" : ""}`} title={i.name}>
             {i.name.length > 26 ? i.name.slice(0, 25) + "…" : i.name}
           </button>
         ))}
         <span className="mx-1 h-4 w-px bg-line-strong" />
-        {PEOPLE.filter((p) => TASKS.some((t) => t.assigneeId === p.id)).map((p) => (
+        {data.people.filter((p) => tasks.some((t) => t.assigneeId === p.id)).map((p) => (
           <button key={p.id} onClick={() => setPersonFilter(personFilter === p.id ? null : p.id)}
             className={`num grid h-7 w-7 cursor-pointer place-items-center rounded-full text-[9.5px] font-extrabold transition-all ${
               personFilter === p.id
@@ -143,7 +218,7 @@ export default function ProyectosPage() {
         ))}
       </div>
 
-      <div className="grid gap-5" style={{ gridTemplateColumns: task ? "1fr 340px" : "1fr" }}>
+      <div className="grid gap-5" style={{ gridTemplateColumns: task ? "1fr 350px" : "1fr" }}>
         <div className="min-w-0">
           {/* ═══ TABLERO ═══ */}
           {view === "tablero" && (
@@ -163,7 +238,8 @@ export default function ProyectosPage() {
                     </div>
                     <div className="space-y-2">
                       {colTasks.map((t) => (
-                        <TaskCard key={t.id} t={t} onOpen={() => setOpenTask(t.id)} />
+                        <TaskCard key={t.id} t={t} person={personOf(t.assigneeId)}
+                          onOpen={() => setOpenTask(t.id)} />
                       ))}
                       {colTasks.length === 0 && (
                         <div className="rounded-xl px-3 py-4 text-center text-[10.5px] italic text-faint">Sin tareas</div>
@@ -180,7 +256,6 @@ export default function ProyectosPage() {
             <Card className="overflow-hidden">
               <div className="overflow-x-auto px-5 py-4">
                 <div className="min-w-[840px]">
-                  {/* cabecera de meses */}
                   <div className="mb-2 grid" style={{ gridTemplateColumns: `240px repeat(${MONTHS.length}, 1fr)` }}>
                     <div />
                     {MONTHS.map((m, i) => (
@@ -199,7 +274,7 @@ export default function ProyectosPage() {
                           const s = Math.max(0, monthIndex(t.start));
                           const e = Math.min(MONTHS.length - 1, Math.max(s, monthIndex(t.due)));
                           const meta = TASK_STATUS_META[t.status];
-                          const late = isOverdue(t);
+                          const late = isOverdueFn(t);
                           return (
                             <div key={t.id} className="grid items-center"
                               style={{ gridTemplateColumns: `240px repeat(${MONTHS.length}, 1fr)` }}>
@@ -217,7 +292,7 @@ export default function ProyectosPage() {
                                         background: late ? "var(--bad)" : meta.color,
                                         opacity: t.status === "HECHA" ? 0.45 : 0.9,
                                       }}
-                                      title={`${t.title} · ${fmtDate(t.start)} → ${fmtDate(t.due)} · ${person(t.assigneeId).name}`} />
+                                      title={`${t.title} · ${fmtDate(t.start)} → ${fmtDate(t.due)}`} />
                                   )}
                                 </div>
                               ))}
@@ -247,7 +322,7 @@ export default function ProyectosPage() {
           {view === "personas" && (
             <Card>
               <CardHeader title="Carga de trabajo por persona"
-                sub="Tareas abiertas, vencidas y próximas a vencer — clic para filtrar el tablero" />
+                sub="Tareas abiertas, vencidas y próximas — clic para filtrar el tablero" />
               <div className="overflow-x-auto px-3 pb-4">
                 <table className="w-full min-w-[680px] text-[12.5px]">
                   <thead>
@@ -258,9 +333,8 @@ export default function ProyectosPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {workload().map((w) => {
-                      const p = person(w.personId);
-                      const max = Math.max(...workload().map((x) => x.open), 1);
+                    {data.workload.map((w) => {
+                      const max = Math.max(...data.workload.map((x) => x.open), 1);
                       return (
                         <tr key={w.personId} className="border-b border-line last:border-0 hover:bg-surface-2/50">
                           <td className="px-3 py-2.5">
@@ -293,140 +367,51 @@ export default function ProyectosPage() {
                 </table>
               </div>
               <div className="border-t border-line px-5 py-2.5 text-[10.5px] text-faint">
-                Personas ficticias de demostración; en operación el directorio se sincroniza con el sistema de talento humano.
+                Personas ficticias de demostración; en operación el directorio se sincroniza con talento humano.
               </div>
             </Card>
           )}
         </div>
 
-        {/* ═══ FICHA DE TAREA ═══ */}
+        {/* ═══ FICHA DE TAREA (con edición si hay permiso) ═══ */}
         {task && (
-          <div className="lg:sticky lg:top-[70px] lg:self-start">
-            <Card className="ring-1 ring-cyan/40">
-              <CardHeader title={task.id} sub="Ficha de la tarea"
-                right={
-                  <button onClick={() => setOpenTask(null)}
-                    className="rounded-md p-1 text-faint transition-colors hover:bg-surface-2 hover:text-ink">
-                    <X size={15} />
-                  </button>
-                } />
-              <div className="space-y-4 px-5 pb-5">
-                <h3 className="text-[14px] font-extrabold leading-snug text-ink">{task.title}</h3>
-
-                <div className="flex items-center gap-2.5">
-                  <span className="num grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-extrabold text-white"
-                    style={{ background: "linear-gradient(135deg, var(--cyan-deep), var(--navy))" }}>
-                    {initials(person(task.assigneeId).name)}
-                  </span>
-                  <div>
-                    <div className="text-[13px] font-bold text-ink">{person(task.assigneeId).name}</div>
-                    <div className="text-[10.5px] text-faint">{person(task.assigneeId).cargo} · {person(task.assigneeId).email}</div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg bg-surface-2 px-3 py-2">
-                    <div className="label !text-[8px]">Inicio</div>
-                    <div className="num text-[12.5px] font-bold text-ink">{fmtDate(task.start)}</div>
-                  </div>
-                  <div className="rounded-lg px-3 py-2"
-                    style={{ background: isOverdue(task) ? "color-mix(in srgb, var(--bad) 9%, white)" : "var(--surface-2)" }}>
-                    <div className="label !text-[8px]">Compromiso</div>
-                    <div className="num text-[12.5px] font-bold"
-                      style={{ color: isOverdue(task) ? "var(--bad)" : "var(--ink)" }}>
-                      {fmtDate(task.due)}{isOverdue(task) ? " · vencida" : dueSoon(task) ? " · próxima" : ""}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full px-2.5 py-1 text-[10.5px] font-bold text-white"
-                    style={{ background: TASK_STATUS_META[task.status].color }}>
-                    {TASK_STATUS_META[task.status].label}
-                  </span>
-                  <Link href="/panel/iniciativas" className="chip chip-cyan">
-                    {INITIATIVES.find((i) => i.id === task.iniId)?.name.slice(0, 30)}
-                    <ChevronRight size={10} />
-                  </Link>
-                </div>
-
-                {task.note && (
-                  <p className="rounded-lg bg-gold-wash px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ color: "#6b5312" }}>
-                    {task.note}
-                  </p>
-                )}
-
-                {task.dependsOn && task.dependsOn.length > 0 && (
-                  <div>
-                    <div className="label mb-1.5 flex items-center gap-1 !text-[8.5px]"><Link2 size={10} /> Depende de</div>
-                    {task.dependsOn.map((d) => {
-                      const dep = TASKS.find((x) => x.id === d)!;
-                      return (
-                        <button key={d} onClick={() => setOpenTask(d)}
-                          className="mb-1 flex w-full items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-left transition-colors hover:bg-surface-3">
-                          <i className="h-2 w-2 shrink-0 rounded-full" style={{ background: TASK_STATUS_META[dep.status].color }} />
-                          <span className="flex-1 truncate text-[11.5px] font-medium text-ink">{dep.title}</span>
-                          <span className="num text-[9.5px] text-faint">{fmtDate(dep.due)}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div>
-                  <div className="label mb-1.5 flex items-center gap-1 !text-[8.5px]"><FileText size={10} /> Evidencia del entregable</div>
-                  {(task.evidenceIds?.length ?? 0) > 0 ? (
-                    task.evidenceIds!.map((eid) => {
-                      const ev = EVIDENCES.find((e) => e.id === eid)!;
-                      return (
-                        <div key={eid} className="mb-1 rounded-lg bg-surface-2 px-3 py-2">
-                          <div className="text-[11.5px] font-semibold text-ink">{ev.title}</div>
-                          <div className="num mt-0.5 text-[9.5px] text-faint">{ev.kind} · {ev.status === "VERIFICADA" ? "verificada" : "pendiente"} · {ev.date}</div>
-                        </div>
-                      );
-                    })
-                  ) : task.requiresEvidence ? (
-                    <p className="rounded-lg px-3 py-2 text-[11.5px]"
-                      style={{ background: "color-mix(in srgb, var(--warn) 10%, white)", color: "var(--warn)" }}>
-                      El cierre exige evidencia y aún no hay soporte adjunto.
-                    </p>
-                  ) : (
-                    <p className="text-[11px] italic text-faint">No exige evidencia formal.</p>
-                  )}
-                </div>
-
-                <div className="flex items-start gap-2 rounded-lg bg-cyan-wash px-3 py-2.5">
-                  <CalendarClock size={13} className="mt-0.5 shrink-0 text-cyan-deep" />
-                  <p className="text-[11px] leading-relaxed text-ink-soft">
-                    En operación, esta ficha permite reprogramar, reasignar y adjuntar evidencia;
-                    cada cambio queda en la bitácora de la iniciativa.
-                  </p>
-                </div>
-              </div>
-            </Card>
-          </div>
+          <TaskSheet
+            task={task}
+            people={data.people}
+            personOf={personOf}
+            editable={data.editable[task.id] === true}
+            canVerify={data.canVerifyEvidence}
+            evidenceStatus={data.evidenceStatus}
+            audit={data.audit.filter((a) => a.entityId === task.id)}
+            saving={saving}
+            userRole={user.role}
+            onClose={() => setOpenTask(null)}
+            onOpenTask={setOpenTask}
+            onPatch={patchTask}
+            onVerify={verifyEv}
+            allTasks={tasks}
+          />
         )}
       </div>
     </>
   );
 }
 
-/* ─── tarjeta de tarea del tablero ─── */
+/* ─── tarjeta del tablero ─── */
 
-function TaskCard({ t, onOpen }: { t: Task; onOpen: () => void }) {
+function TaskCard({ t, person: p, onOpen }: { t: Task; person: Person | null; onOpen: () => void }) {
   const ini = INITIATIVES.find((i) => i.id === t.iniId)!;
-  const late = isOverdue(t);
-  const soon = dueSoon(t);
+  const late = isOverdueFn(t);
+  const soon = dueSoonFn(t);
   return (
-    <button onClick={onOpen}
-      className="panel panel-lift block w-full p-3 text-left">
+    <button onClick={onOpen} className="panel panel-lift block w-full p-3 text-left">
       <div className="text-[12px] font-bold leading-snug text-ink">{t.title}</div>
       <div className="mt-1.5 truncate text-[9.5px] text-faint">{ini.name}</div>
       <div className="mt-2 flex items-center justify-between">
         <span className="num grid h-6 w-6 place-items-center rounded-full text-[8.5px] font-extrabold text-white"
           style={{ background: "linear-gradient(135deg, var(--cyan-deep), var(--navy))" }}
-          title={person(t.assigneeId).name}>
-          {initials(person(t.assigneeId).name)}
+          title={p?.name}>
+          {p ? initials(p.name) : "?"}
         </span>
         <span className="flex items-center gap-1.5">
           {(t.evidenceIds?.length ?? 0) > 0 && <FileText size={11} className="text-cyan-deep" />}
@@ -438,5 +423,214 @@ function TaskCard({ t, onOpen }: { t: Task; onOpen: () => void }) {
         </span>
       </div>
     </button>
+  );
+}
+
+/* ─── ficha con edición ─── */
+
+function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus, audit, saving, userRole, onClose, onOpenTask, onPatch, onVerify, allTasks }: {
+  task: Task;
+  people: Person[];
+  personOf: (id: string) => Person | null;
+  editable: boolean;
+  canVerify: boolean;
+  evidenceStatus: Record<string, "VERIFICADA" | "PENDIENTE">;
+  audit: { id: number; at: string; actor: string; change: string }[];
+  saving: boolean;
+  userRole: string;
+  onClose: () => void;
+  onOpenTask: (id: string) => void;
+  onPatch: (id: string, patch: Record<string, unknown>) => Promise<void>;
+  onVerify: (id: string) => Promise<void>;
+  allTasks: Task[];
+}) {
+  const [draft, setDraft] = useState({ status: task.status, assigneeId: task.assigneeId, start: task.start, due: task.due });
+  useEffect(() => {
+    setDraft({ status: task.status, assigneeId: task.assigneeId, start: task.start, due: task.due });
+  }, [task]);
+  const dirty = draft.status !== task.status || draft.assigneeId !== task.assigneeId
+    || draft.start !== task.start || draft.due !== task.due;
+  const assignee = personOf(task.assigneeId);
+
+  return (
+    <div className="lg:sticky lg:top-[70px] lg:self-start">
+      <Card className="ring-1 ring-cyan/40">
+        <CardHeader title={task.id}
+          sub={editable ? "Ficha editable — tu rol puede modificarla" : `Solo lectura para tu rol (${userRole})`}
+          right={
+            <button onClick={onClose}
+              className="rounded-md p-1 text-faint transition-colors hover:bg-surface-2 hover:text-ink">
+              <X size={15} />
+            </button>
+          } />
+        <div className="space-y-4 px-5 pb-5">
+          <h3 className="text-[14px] font-extrabold leading-snug text-ink">{task.title}</h3>
+
+          {/* responsable */}
+          {editable ? (
+            <div>
+              <div className="label mb-1 !text-[8.5px]">Responsable</div>
+              <select value={draft.assigneeId}
+                onChange={(e) => setDraft({ ...draft, assigneeId: e.target.value })}
+                className="input !py-2 text-[12.5px]">
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name} — {p.cargo}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            assignee && (
+              <div className="flex items-center gap-2.5">
+                <span className="num grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-extrabold text-white"
+                  style={{ background: "linear-gradient(135deg, var(--cyan-deep), var(--navy))" }}>
+                  {initials(assignee.name)}
+                </span>
+                <div>
+                  <div className="text-[13px] font-bold text-ink">{assignee.name}</div>
+                  <div className="text-[10.5px] text-faint">{assignee.cargo} · {assignee.email}</div>
+                </div>
+              </div>
+            )
+          )}
+
+          {/* fechas */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="label mb-1 !text-[8.5px]">Inicio</div>
+              {editable ? (
+                <input type="date" value={draft.start}
+                  onChange={(e) => setDraft({ ...draft, start: e.target.value })}
+                  className="input !py-1.5 text-[12px]" />
+              ) : (
+                <div className="num rounded-lg bg-surface-2 px-3 py-2 text-[12.5px] font-bold text-ink">{fmtDate(task.start)}</div>
+              )}
+            </div>
+            <div>
+              <div className="label mb-1 !text-[8.5px]">Compromiso</div>
+              {editable ? (
+                <input type="date" value={draft.due}
+                  onChange={(e) => setDraft({ ...draft, due: e.target.value })}
+                  className="input !py-1.5 text-[12px]" />
+              ) : (
+                <div className="num rounded-lg px-3 py-2 text-[12.5px] font-bold"
+                  style={{
+                    background: isOverdueFn(task) ? "color-mix(in srgb, var(--bad) 9%, white)" : "var(--surface-2)",
+                    color: isOverdueFn(task) ? "var(--bad)" : "var(--ink)",
+                  }}>
+                  {fmtDate(task.due)}{isOverdueFn(task) ? " · vencida" : ""}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* estado */}
+          <div>
+            <div className="label mb-1 !text-[8.5px]">Estado</div>
+            {editable ? (
+              <div className="flex flex-wrap gap-1.5">
+                {COLUMNS.map((st) => (
+                  <button key={st} onClick={() => setDraft({ ...draft, status: st })}
+                    className={`rounded-full px-2.5 py-1 text-[10.5px] font-bold transition-all ${
+                      draft.status === st ? "text-white shadow-sm" : "bg-surface-2 text-muted hover:text-ink"}`}
+                    style={draft.status === st ? { background: TASK_STATUS_META[st].color } : undefined}>
+                    {TASK_STATUS_META[st].label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="rounded-full px-2.5 py-1 text-[10.5px] font-bold text-white"
+                style={{ background: TASK_STATUS_META[task.status].color }}>
+                {TASK_STATUS_META[task.status].label}
+              </span>
+            )}
+          </div>
+
+          {editable && dirty && (
+            <button onClick={() => onPatch(task.id, draft)} disabled={saving}
+              className="btn-primary w-full !py-2 text-[12.5px]">
+              {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+              Guardar cambios
+            </button>
+          )}
+
+          {task.note && (
+            <p className="rounded-lg bg-gold-wash px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ color: "#6b5312" }}>
+              {task.note}
+            </p>
+          )}
+
+          {/* dependencias */}
+          {task.dependsOn && task.dependsOn.length > 0 && (
+            <div>
+              <div className="label mb-1.5 flex items-center gap-1 !text-[8.5px]"><Link2 size={10} /> Depende de</div>
+              {task.dependsOn.map((d) => {
+                const dep = allTasks.find((x) => x.id === d)!;
+                return (
+                  <button key={d} onClick={() => onOpenTask(d)}
+                    className="mb-1 flex w-full items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-left transition-colors hover:bg-surface-3">
+                    <i className="h-2 w-2 shrink-0 rounded-full" style={{ background: TASK_STATUS_META[dep.status].color }} />
+                    <span className="flex-1 truncate text-[11.5px] font-medium text-ink">{dep.title}</span>
+                    <span className="num text-[9.5px] text-faint">{fmtDate(dep.due)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* evidencia + verificación */}
+          <div>
+            <div className="label mb-1.5 flex items-center gap-1 !text-[8.5px]"><FileText size={10} /> Evidencia del entregable</div>
+            {(task.evidenceIds?.length ?? 0) > 0 ? (
+              task.evidenceIds!.map((eid) => {
+                const ev = EVIDENCES.find((e) => e.id === eid)!;
+                const st = evidenceStatus[eid] ?? ev.status;
+                return (
+                  <div key={eid} className="mb-1 flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11.5px] font-semibold text-ink">{ev.title}</div>
+                      <div className="num mt-0.5 text-[9.5px] text-faint">{ev.kind} · {ev.date}</div>
+                    </div>
+                    {st === "VERIFICADA" ? (
+                      <span className="chip chip-ok"><ShieldCheck size={10} /> Verificada</span>
+                    ) : canVerify ? (
+                      <button onClick={() => onVerify(eid)} disabled={saving}
+                        className="chip chip-cyan cursor-pointer">
+                        Verificar
+                      </button>
+                    ) : (
+                      <span className="chip chip-warn">Pendiente</span>
+                    )}
+                  </div>
+                );
+              })
+            ) : task.requiresEvidence ? (
+              <p className="rounded-lg px-3 py-2 text-[11.5px]"
+                style={{ background: "color-mix(in srgb, var(--warn) 10%, white)", color: "var(--warn)" }}>
+                El cierre exige evidencia: el servidor rechazará «Hecha» sin soporte adjunto.
+              </p>
+            ) : (
+              <p className="text-[11px] italic text-faint">No exige evidencia formal.</p>
+            )}
+          </div>
+
+          {/* auditoría */}
+          {audit.length > 0 && (
+            <div>
+              <div className="label mb-1.5 flex items-center gap-1 !text-[8.5px]"><History size={10} /> Últimos cambios</div>
+              <div className="space-y-1">
+                {audit.slice(0, 4).map((a) => (
+                  <div key={a.id} className="rounded-lg bg-surface-2/70 px-3 py-1.5">
+                    <div className="text-[11px] leading-snug text-ink-soft">{a.change}</div>
+                    <div className="num mt-0.5 text-[9px] text-faint">
+                      {a.actor} · {new Date(a.at).toLocaleString("es-CO", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+    </div>
   );
 }

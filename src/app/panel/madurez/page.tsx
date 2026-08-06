@@ -9,6 +9,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader, Card, CardHeader, LevelBadge, StateDot } from "@/components/ui";
+import { AccessChip } from "@/components/user-context";
 import { MaturityRadar, MaturityHeatmap } from "@/components/charts";
 import { LINES, DIMENSIONS, SCORES, LEVELS, EVIDENCES, fmtNum } from "@/data/demo";
 import { ASSESSMENTS, responsible } from "@/data/cmi";
@@ -76,7 +77,7 @@ export default function MadurezPage() {
   return (
     <>
       <PageHeader kicker="M1 · Diagnóstico de madurez" title="Madurez por línea y dimensión"
-        desc={`${VARIABLES.length} variables medidas contra 8 referentes (eMM, Decreto 1330, CNA, TOGAF, DAMA, INTEF, ISO 27001, CMI), con hallazgo, recomendación y evidencia por variable.`} />
+        desc={`${VARIABLES.length} variables medidas contra 8 referentes (eMM, Decreto 1330, CNA, TOGAF, DAMA, INTEF, ISO 27001, CMI), con hallazgo, recomendación y evidencia por variable.`}  actions={<AccessChip module="madurez" />} />
 
       {/* selector de vista */}
       <div className="rise mb-6 flex flex-wrap gap-1.5 rounded-2xl bg-surface-2 p-1.5">

@@ -6,10 +6,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
-  TASKS, PEOPLE, person, tasksOf, isOverdue, dueSoon, DEMO_TODAY,
+  PEOPLE, person, isOverdue, dueSoon, DEMO_TODAY,
   type Task, type TaskStatus,
 } from "@/data/proyectos";
+import { getTasks } from "@/server/store";
 import { INITIATIVES_FULL } from "@/data/cmi";
+
+// Fuente de tareas: el store mutable (memoria + write-through a Postgres).
+const TASKS = () => getTasks();
+const tasksOf = (iniId: string) => TASKS().filter((t) => t.iniId === iniId);
 
 /* ═══ Alertas de tareas ═══ */
 
@@ -28,9 +33,9 @@ const daysLate = (t: Task) =>
 
 export function taskAlerts(): TaskAlert[] {
   const alerts: TaskAlert[] = [];
-  const byId = new Map(TASKS.map((t) => [t.id, t]));
+  const byId = new Map(TASKS().map((t) => [t.id, t]));
 
-  for (const t of TASKS) {
+  for (const t of TASKS()) {
     const ini = INITIATIVES_FULL.find((i) => i.id === t.iniId)!;
     const who = person(t.assigneeId).name;
 
@@ -105,7 +110,7 @@ export type Workload = {
 
 export function workload(): Workload[] {
   return PEOPLE.map((p) => {
-    const mine = TASKS.filter((t) => t.assigneeId === p.id);
+    const mine = TASKS().filter((t) => t.assigneeId === p.id);
     return {
       personId: p.id,
       name: p.name,
@@ -139,13 +144,13 @@ export function portfolioTaskStats() {
   const byStatus: Record<TaskStatus, number> = {
     POR_HACER: 0, EN_CURSO: 0, EN_REVISION: 0, BLOQUEADA: 0, HECHA: 0,
   };
-  for (const t of TASKS) byStatus[t.status]++;
+  for (const t of TASKS()) byStatus[t.status]++;
   return {
-    total: TASKS.length,
+    total: TASKS().length,
     byStatus,
-    overdue: TASKS.filter(isOverdue).length,
-    dueSoon: TASKS.filter((t) => dueSoon(t)).length,
-    withEvidence: TASKS.filter((t) => (t.evidenceIds?.length ?? 0) > 0).length,
-    people: PEOPLE.filter((p) => TASKS.some((t) => t.assigneeId === p.id)).length,
+    overdue: TASKS().filter(isOverdue).length,
+    dueSoon: TASKS().filter((t) => dueSoon(t)).length,
+    withEvidence: TASKS().filter((t) => (t.evidenceIds?.length ?? 0) > 0).length,
+    people: PEOPLE.filter((p) => TASKS().some((t) => t.assigneeId === p.id)).length,
   };
 }

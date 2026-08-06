@@ -8,6 +8,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PageHeader, Card, CardHeader } from "@/components/ui";
+import { AccessChip } from "@/components/user-context";
 import { CAPABILITIES, KPIS, INITIATIVES, LINES, fmtNum } from "@/data/demo";
 import { PERSPECTIVES, CMI_OBJECTIVES, responsible } from "@/data/cmi";
 import { X, Target, Gauge, Network, ListChecks } from "lucide-react";
@@ -25,7 +26,7 @@ export default function CapacidadesPage() {
   return (
     <>
       <PageHeader kicker="M3 · Mapa estratégico" title="Cuadro de Mando Integral"
-        desc="Cinco perspectivas encadenadas: el impacto se sostiene en la comunidad, la comunidad en los procesos y los procesos en la innovación. Cada objetivo declara sus indicadores, capacidades e iniciativas." />
+        desc="Cinco perspectivas encadenadas: el impacto se sostiene en la comunidad, la comunidad en los procesos y los procesos en la innovación. Cada objetivo declara sus indicadores, capacidades e iniciativas."  actions={<AccessChip module="capacidades" />} />
 
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         {/* ── mapa por perspectivas ── */}

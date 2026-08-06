@@ -5,6 +5,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PageHeader, Card, CardHeader, StatusChip } from "@/components/ui";
+import { AccessChip } from "@/components/user-context";
 import { GanttChart, PriorityMatrix } from "@/components/charts";
 import { INITIATIVES, LINES, fmtCOP } from "@/data/demo";
 import { priorityRanking } from "@/lib/ies";
@@ -19,7 +20,7 @@ export default function RutaPage() {
   return (
     <>
       <PageHeader kicker="M5 · Mapa de ruta" title="Roadmap 2026–2028"
-        desc="La ruta con pertinencia contextual: cada iniciativa declara horizonte, responsable, presupuesto, capacidad que fortalece e indicador que debe mover." />
+        desc="La ruta con pertinencia contextual: cada iniciativa declara horizonte, responsable, presupuesto, capacidad que fortalece e indicador que debe mover." actions={<AccessChip module="ruta" />} />
 
       <div className="mb-5 grid gap-5 lg:grid-cols-2">
         <Card className="rise rise-1">

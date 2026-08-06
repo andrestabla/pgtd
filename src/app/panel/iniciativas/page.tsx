@@ -7,6 +7,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PageHeader, Card, StateDot, StatusChip, StatCard } from "@/components/ui";
+import { AccessChip } from "@/components/user-context";
 import { BudgetBar } from "@/components/charts";
 import { INITIATIVES, fmtCOP } from "@/data/demo";
 import { CMI_OBJECTIVES, responsible, type ActionStatus } from "@/data/cmi";
@@ -51,7 +52,7 @@ export default function IniciativasPage() {
   return (
     <>
       <PageHeader kicker="M6 · Seguimiento" title="Iniciativas, acciones y factores de éxito"
-        desc="Cada iniciativa declara su meta de resultado, sus acciones con meta propia, su responsable, su presupuesto en tres estados y su bitácora. Cuando un factor acumula dos revisiones en rojo, la conversación se puede tener a tiempo." />
+        desc="Cada iniciativa declara su meta de resultado, sus acciones con meta propia, su responsable, su presupuesto en tres estados y su bitácora. Cuando un factor acumula dos revisiones en rojo, la conversación se puede tener a tiempo."  actions={<AccessChip module="iniciativas" />} />
 
       <div className="rise rise-1 mb-6 grid gap-4 sm:grid-cols-4">
         <StatCard label="Presupuesto del portafolio" value={totals.planned / 1e6} decimals={0}
