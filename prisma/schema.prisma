@@ -1,0 +1,240 @@
+// PGTD · Plataforma de Gestión de la Transformación Digital — Algoritmo T
+// Motor: PostgreSQL vía Prisma. Multi-institución desde el día 1.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Identidad ───────────────────────────────────────────────────────────────
+
+enum Role {
+  CONSULTOR      // Algoritmo T: configura instrumento, publica mediciones
+  LIDER          // Líder institucional: administra iniciativas, KPI, presupuesto
+  RESPONSABLE    // Responsable de línea: evidencia y avances de su línea
+  DIRECTIVO      // Rectoría / Consejo: solo lectura
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  passwordHash  String
+  role          Role      @default(DIRECTIVO)
+  line          Int?      // 1..4 si es RESPONSABLE
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  active        Boolean   @default(true)
+  failedLogins  Int       @default(0)
+  lockedUntil   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ─── Institución ─────────────────────────────────────────────────────────────
+
+model Institution {
+  id         String  @id @default(cuid())
+  slug       String  @unique
+  name       String
+  shortName  String
+  city       String
+  department String
+  logoUrl    String?
+  active     Boolean @default(true)
+
+  users        User[]
+  assessments  Assessment[]
+  capabilities Capability[]
+  kpis         Kpi[]
+  initiatives  Initiative[]
+  createdAt    DateTime @default(now())
+}
+
+// ─── Instrumento y mediciones de madurez ────────────────────────────────────
+
+model MaturityModel {
+  id          String   @id @default(cuid())
+  version     String   @unique // p.ej. "2026.1"
+  name        String
+  // líneas 4.1–4.4 y dimensiones como catálogo JSON versionado:
+  // lines: [{n:1, code:"4.1", name, color}], dimensions: [{key, name}]
+  lines       Json
+  dimensions  Json
+  active      Boolean  @default(true)
+  assessments Assessment[]
+  createdAt   DateTime @default(now())
+}
+
+enum AssessmentStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+}
+
+model Assessment {
+  id            String   @id @default(cuid())
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  modelId       String
+  model         MaturityModel @relation(fields: [modelId], references: [id])
+  label         String   // "Línea base · Fase 0"
+  periodStart   DateTime
+  periodEnd     DateTime
+  status        AssessmentStatus @default(DRAFT)
+  publishedAt   DateTime?
+  scores        Score[]
+  createdAt     DateTime @default(now())
+
+  @@index([institutionId, publishedAt(sort: Desc)])
+}
+
+model Score {
+  id           String  @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  line         Int     // 1..4
+  dimension    String  // organizacional | misional | tecnologica | datos
+  value        Float   // 1..5
+  target       Float?  // meta a 24 meses
+  note         String?
+  evidences    Evidence[]
+
+  @@unique([assessmentId, line, dimension])
+}
+
+model Evidence {
+  id         String   @id @default(cuid())
+  scoreId    String
+  score      Score    @relation(fields: [scoreId], references: [id], onDelete: Cascade)
+  title      String
+  source     String?  // dependencia que la aporta
+  fileUrl    String?  // objeto en R2
+  note       String?
+  capturedBy String?
+  capturedAt DateTime @default(now())
+}
+
+// ─── Capacidades y mapa estratégico ─────────────────────────────────────────
+
+model Capability {
+  id            String  @id @default(cuid())
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  line          Int
+  name          String
+  description   String?
+  currentLevel  Float
+  targetLevel   Float
+  ownerRole     String?
+  objective     String? // objetivo institucional al que sirve
+  initiatives   Initiative[]
+
+  @@index([institutionId, line])
+}
+
+// ─── Indicadores ─────────────────────────────────────────────────────────────
+
+enum KpiFrequency {
+  MENSUAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+}
+
+model Kpi {
+  id            String  @id @default(cuid())
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  line          Int
+  code          String
+  name          String
+  definition    String?
+  unit          String  // %, número, razón…
+  source        String? // sistema o dependencia que produce el dato
+  ownerRole     String?
+  frequency     KpiFrequency @default(TRIMESTRAL)
+  baseline      Float?
+  target        Float?
+  goodDirection String  @default("up") // up | down
+  values        KpiValue[]
+  initiatives   Initiative[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId, line])
+}
+
+model KpiValue {
+  id        String   @id @default(cuid())
+  kpiId     String
+  kpi       Kpi      @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+  period    String   // "2026-T1"
+  value     Float
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([kpiId, period])
+}
+
+// ─── Roadmap e iniciativas ───────────────────────────────────────────────────
+
+enum Horizon {
+  CORTO      // 0–12 meses
+  MEDIANO    // 12–36 meses
+  LARGO
+}
+
+enum InitiativeStatus {
+  PLANEADA
+  EN_CURSO
+  EN_RIESGO
+  COMPLETADA
+  SUSPENDIDA
+}
+
+model Initiative {
+  id             String   @id @default(cuid())
+  institutionId  String
+  institution    Institution @relation(fields: [institutionId], references: [id])
+  line           Int
+  name           String
+  description    String?
+  horizon        Horizon
+  impact         Int      // 1..5
+  feasibility    Int      // 1..5
+  status         InitiativeStatus @default(PLANEADA)
+  ownerRole      String?
+  startQuarter   String?  // "2026-T3"
+  endQuarter     String?
+  budgetPlanned   Float   @default(0)
+  budgetCommitted Float   @default(0)
+  budgetExecuted  Float   @default(0)
+  progress       Int      @default(0) // %
+  capabilityId   String?
+  capability     Capability? @relation(fields: [capabilityId], references: [id])
+  kpiId          String?
+  kpi            Kpi?     @relation(fields: [kpiId], references: [id])
+  successFactors SuccessFactor[]
+
+  @@index([institutionId, horizon])
+}
+
+enum FactorState {
+  VERDE
+  AMBAR
+  ROJO
+}
+
+model SuccessFactor {
+  id           String   @id @default(cuid())
+  initiativeId String
+  initiative   Initiative @relation(fields: [initiativeId], references: [id], onDelete: Cascade)
+  name         String
+  state        FactorState @default(VERDE)
+  history      Json?    // [{period:"jun", state:"VERDE"}]
+  note         String?
+  reviewedAt   DateTime @default(now())
+}

@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PGTD · Plataforma de Gestión de la Transformación Digital
 
-## Getting Started
+Prototipo funcional del producto descrito en la propuesta de Algoritmo T para la
+Universidad Popular del Cesar: el diagnóstico de transformación digital como
+sistema de gestión, no como documento.
 
-First, run the development server:
+## Stack
+
+| Capa | Tecnología | Rol |
+|---|---|---|
+| Aplicación | Next.js 16 · React 19 | Interfaz rápida y responsive, renderizada en servidor. Un mismo código sirve el panel interno y el portal público. |
+| Base de datos | PostgreSQL · Prisma 7 | Motor relacional maduro. Cada cambio de estructura queda registrado en una migración, con historial y reversión. |
+| Infraestructura | Vercel | Despliegue continuo, ambientes separados, escalado automático y SSL. |
+| Archivos | Cloudflare R2 | Evidencias documentales, logotipos institucionales y exportaciones (SDK S3 ya instalado). |
+| Identidad | Sesión HMAC en cookie HttpOnly | Roles, expiración por inactividad; el esquema ya modela bloqueo por intentos fallidos. |
+| Inteligencia | OpenAI | Redacción asistida de fichas y normalización de importaciones (SDK instalado, pendiente de conectar). |
+
+## Módulos
+
+| Código | Módulo | Estado |
+|---|---|---|
+| M1 | Medición de madurez — radar, heatmap 4×4, detalle con evidencia, escala de 5 niveles | ✅ |
+| M2 | Comparación — pares, cuadrante de pertinencia, mapas de Colombia y Cesar (geometría oficial, filtro por subregión) | ✅ |
+| M3 | Capacidades — mapa estratégico navegable objetivo → capacidad → iniciativa → KPI | ✅ |
+| M4 | Indicadores — batería con serie, semáforo frente a meta, dueño y fuente | ✅ |
+| M5 | Ruta — Gantt por trimestres + matriz impacto × factibilidad, ficha de iniciativa | ✅ |
+| M6 | Seguimiento — presupuesto en tres estados, factores críticos con historial | ✅ |
+| M7 | Inteligencia — puerta a los observatorios de Algoritmo T | ✅ (enlace) |
+
+## Ejecutar
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Modo demo (por defecto):** no requiere base de datos. La autenticación valida
+contra las cuentas de demostración y todos los módulos leen `src/data/demo.ts`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Cuenta | Rol |
+|---|---|
+| consultor@algoritmot.com | Consultor (configura y publica) |
+| lider@unicesar.edu.co | Líder institucional |
+| academica@unicesar.edu.co | Responsable de línea 4.1 |
+| rectoria@unicesar.edu.co | Directivo (solo lectura) |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Contraseña común: `pgtd-demo-2026`.
 
-## Learn More
+## Conectar PostgreSQL
 
-To learn more about Next.js, take a look at the following resources:
+1. Crear la base (Neon, Vercel Postgres o local) y poner `DATABASE_URL` en `.env.local`.
+2. `npm run db:migrate` — crea el esquema (11 modelos, migración versionada).
+3. `npm run db:seed` — siembra la UPC con los mismos datos del modo demo.
+4. Migrar `api/auth/login` de `DEMO_USERS` al modelo `User` (bcrypt ya instalado).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`src/data/demo.ts` es la fuente única: alimenta la UI en modo demo y el seed,
+de modo que no hay divergencia entre ambos.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Estructura
 
-## Deploy on Vercel
+```
+src/
+├── app/
+│   ├── page.tsx                 # portada + login
+│   ├── api/auth/                # login / logout (cookie HMAC)
+│   └── panel/                   # módulos M1–M7 (protegidos por sesión)
+├── components/
+│   ├── charts.tsx               # radar, heatmap, gantt, matriz, mapas — SVG propio
+│   ├── shell.tsx                # sidebar + topbar
+│   └── ui.tsx                   # primitivas (cards, chips, badges)
+├── data/
+│   ├── demo.ts                  # datos ilustrativos UPC (única fuente)
+│   └── geo.ts                   # paths SVG precalculados del GeoJSON oficial
+└── lib/session.ts               # sesión firmada
+prisma/
+├── schema.prisma                # multi-institución: 11 modelos
+└── seed.ts
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Nota sobre los datos
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Todos los valores son ilustrativos y así se declara en el banner de cada módulo.
+La primera medición real de la UPC se produce en la Fase 0 de la consultoría.
