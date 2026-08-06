@@ -92,6 +92,38 @@ export const matrixCell = (line: number, d7: D7) => {
   return vars.length ? { s: mean(vars.map(S)), n: vars.length } : null;
 };
 
+/* ═══ Estados de la práctica ═══
+   El modelo no evalúa solo "digitalización": diferencia disponibilidad
+   (¿existe?), adopción (¿se usa?), integración (¿está articulada?) e impacto
+   (¿se demuestran resultados?). Derivados de los componentes D/I/K. */
+
+export type PracticeState = "AUSENTE" | "DISPONIBILIDAD" | "ADOPCION" | "INTEGRACION" | "IMPACTO";
+
+export const PRACTICE_STATES: { key: PracticeState; label: string; question: string }[] = [
+  { key: "AUSENTE", label: "Ausente", question: "No hay política, capacidad ni recursos verificables." },
+  { key: "DISPONIBILIDAD", label: "Disponible", question: "¿Existen políticas, capacidades, plataformas, personas y recursos?" },
+  { key: "ADOPCION", label: "Adoptada", question: "¿Las capacidades son utilizadas regularmente por los actores pertinentes?" },
+  { key: "INTEGRACION", label: "Integrada", question: "¿Las prácticas están articuladas con procesos, decisiones y sistemas?" },
+  { key: "IMPACTO", label: "Con impacto", question: "¿Se demuestran cambios positivos, sostenibles y atribuibles?" },
+];
+
+export function practiceState(v: Variable): PracticeState {
+  const { d, i, k } = v.evidence;
+  if (k >= 3) return "IMPACTO";                 // resultados medidos y revisados
+  if (d >= 3 && i >= 3) return "INTEGRACION";   // institucionalizada y desplegada
+  if (i >= 2) return "ADOPCION";                // uso recurrente aunque parcial
+  if (d >= 1 || i >= 1) return "DISPONIBILIDAD";
+  return "AUSENTE";
+}
+
+export const practiceStateCounts = () => {
+  const counts: Record<PracticeState, number> = {
+    AUSENTE: 0, DISPONIBILIDAD: 0, ADOPCION: 0, INTEGRACION: 0, IMPACTO: 0,
+  };
+  for (const v of VARIABLES) counts[practiceState(v)]++;
+  return counts;
+};
+
 /* ═══ Cobertura de evidencia ═══
    Un ítem tiene evidencia suficiente cuando está documentado e implementado
    (D≥2, I≥2) y al menos cuenta ocasionalmente (K≥1). El tablero debe mostrar

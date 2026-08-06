@@ -16,7 +16,11 @@ import {
   VARIABLES, variablesOf, gapOf, DOMAINS, domainScore, type Variable, type Frame,
 } from "@/data/instrument";
 import { REG_CALIFICADOS, regCalStats, programOf } from "@/data/regcal";
-import { iesSummary, P as pIES, E as eIES, S as sIES, gapReading, IES_LEVELS, levelOf } from "@/lib/ies";
+import {
+  iesSummary, P as pIES, E as eIES, S as sIES, gapReading, IES_LEVELS, levelOf,
+  practiceState, practiceStateCounts, PRACTICE_STATES,
+} from "@/lib/ies";
+import { ACTOR_GROUPS, responsesOf, topDissensus } from "@/data/actores";
 import { KPIS, INITIATIVES } from "@/data/demo";
 import {
   FileText, X, CheckCircle2, Clock3, History, ChevronDown, BookOpenCheck,
@@ -583,6 +587,126 @@ function IesView() {
         </Card>
       </div>
 
+      {/* estados de la práctica + brechas entre actores */}
+      <div className="rise rise-4 mt-5 grid gap-5 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="Estados de la práctica"
+            sub="Disponibilidad → adopción → integración → impacto: el modelo no evalúa solo digitalización" />
+          <div className="px-5 pb-5">
+            {(() => {
+              const counts = practiceStateCounts();
+              const total = VARIABLES.length;
+              const COLORS: Record<string, string> = {
+                AUSENTE: "var(--n1)", DISPONIBILIDAD: "var(--n2)", ADOPCION: "var(--n3)",
+                INTEGRACION: "var(--n4)", IMPACTO: "var(--n5)",
+              };
+              return (
+                <>
+                  <div className="flex h-[16px] overflow-hidden rounded-full">
+                    {PRACTICE_STATES.map((st) => counts[st.key] > 0 && (
+                      <div key={st.key} style={{ width: `${(counts[st.key] / total) * 100}%`, background: COLORS[st.key] }}
+                        title={`${st.label}: ${counts[st.key]}`} />
+                    ))}
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {PRACTICE_STATES.map((st) => (
+                      <div key={st.key} className="flex items-start gap-2.5">
+                        <span className="num mt-0.5 grid h-5 w-7 shrink-0 place-items-center rounded text-[10px] font-extrabold text-white"
+                          style={{ background: COLORS[st.key] }}>{counts[st.key]}</span>
+                        <div>
+                          <span className="text-[12px] font-bold text-ink">{st.label}</span>
+                          <span className="ml-1.5 text-[11px] text-muted">{st.question}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[11px] leading-snug text-faint">
+                    La brecha típica no está en la disponibilidad sino en el salto a integración e
+                    impacto: {counts.DISPONIBILIDAD + counts.ADOPCION} prácticas existen o se usan,
+                    pero solo {counts.INTEGRACION + counts.IMPACTO} están articuladas o demuestran resultados.
+                  </p>
+                </>
+              );
+            })()}
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="Brechas entre grupos de actores"
+            sub="Promedio por grupo y pesos explícitos (20/25/20/25/10) — rango ≥ 2 es hallazgo" />
+          <div className="space-y-2.5 px-5 pb-4">
+            {topDissensus(2).slice(0, 6).map((d) => (
+              <div key={d.id} className="rounded-xl bg-surface-2/60 px-3.5 py-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[12.5px] font-bold text-ink">
+                    <span className="num mr-1.5 text-[9.5px] text-cyan-deep">{d.id}</span>{d.name}
+                  </span>
+                  <span className="chip chip-warn shrink-0">rango {d.range}</span>
+                </div>
+                <div className="mt-2 flex items-center gap-3">
+                  {ACTOR_GROUPS.map((g) => {
+                    const val = d.responses[g.key];
+                    const extreme = g.key === d.highGroup || g.key === d.lowGroup;
+                    return (
+                      <div key={g.key} className="flex flex-col items-center gap-0.5" title={`${g.label}: ${val}`}>
+                        <span className={`num grid h-6 w-6 place-items-center rounded-full text-[10.5px] font-extrabold ${
+                          extreme ? "text-white" : "text-ink-soft"}`}
+                          style={{ background: extreme
+                            ? (g.key === d.highGroup ? "var(--n4)" : "var(--bad)")
+                            : "var(--surface-3)" }}>
+                          {val}
+                        </span>
+                        <span className="text-[8px] uppercase tracking-wide text-faint">{g.key.slice(0, 4)}</span>
+                      </div>
+                    );
+                  })}
+                  <span className="ml-auto text-[10.5px] leading-snug text-muted">
+                    {ACTOR_GROUPS.find((g) => g.key === d.highGroup)?.label.split(" ")[0]} ve {d.responses[d.highGroup]};{" "}
+                    {ACTOR_GROUPS.find((g) => g.key === d.lowGroup)?.label.split(" ")[0].toLowerCase()} vive {d.responses[d.lowGroup]}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-line px-5 py-2.5 text-[10.5px] text-faint">
+            El agregado no es promedio directo de participantes: primero por grupo, luego pesos —
+            así los estudiantes no dominan asuntos de arquitectura ni los directivos la experiencia de servicio.
+          </div>
+        </Card>
+      </div>
+
+      {/* versiones de aplicación */}
+      <Card className="rise rise-4 mt-5">
+        <CardHeader title="Versiones de aplicación del instrumento"
+          sub="Rutas por rol: nadie responde el banco completo (máximo habitual 46 ítems)" />
+        <div className="overflow-x-auto px-5 pb-4">
+          <table className="w-full min-w-[640px] text-[12px]">
+            <thead>
+              <tr className="border-b border-line-strong">
+                {["Versión", "Componentes", "Por persona", "Institucional", "Uso"].map((h) => (
+                  <th key={h} className="label pb-2 pr-4 text-left !text-[8.5px]">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ["Diagnóstico breve", "Caracterización + núcleo de 28 ítems", "15–20 min", "1–2 semanas", "Sensibilización y línea base provisional"],
+                ["Módulo misional", "Núcleo + un módulo de 18 ítems", "30–40 min", "2–4 semanas", "Diagnóstico focalizado de una línea"],
+                ["Diagnóstico integral", "Núcleo y rutas misionales por rol", "30–50 min", "4–6 semanas", "Perfil institucional completo"],
+                ["Auditoría profunda", "Encuestas + evidencias + entrevistas + talleres", "Variable", "6–10 semanas", "Puntuación verificada y hoja de ruta (esta medición)"],
+                ["Seguimiento", "Ítems críticos, evidencias nuevas y KPI", "10–25 min", "2–4 semanas", "Revisión semestral o anual"],
+              ].map((row, ri) => (
+                <tr key={row[0]} className={`border-b border-line last:border-0 ${ri === 3 ? "bg-cyan-wash/40" : ""}`}>
+                  {row.map((cell, ci) => (
+                    <td key={ci} className={`py-2 pr-4 ${ci === 0 ? "font-bold text-ink" : "text-muted"}`}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
       <p className="mt-5 text-[10.5px] leading-relaxed text-faint">
         Metodología AlgoritmoT-IES (deep-research-report): S = 0,40·P + 0,60·E con E = 0,25·D + 0,35·I + 0,40·K.
         Percepción marcada como provisional hasta auditoría; pesos iniciales iguales por ítem; los puntos de corte
@@ -651,6 +775,31 @@ function VariableRow({ v, idx, open, onToggle }: {
               <p className="text-[12px] leading-relaxed text-ink-soft">
                 <b>Recomendación:</b> {v.recomendacion}
               </p>
+            </div>
+            {/* estado de la práctica y respuestas por grupo */}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {(() => {
+                const st = practiceState(v);
+                const meta = PRACTICE_STATES.find((x) => x.key === st)!;
+                const COLORS: Record<string, string> = {
+                  AUSENTE: "var(--n1)", DISPONIBILIDAD: "var(--n2)", ADOPCION: "var(--n3)",
+                  INTEGRACION: "var(--n4)", IMPACTO: "var(--n5)",
+                };
+                return (
+                  <span className="rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
+                    style={{ background: COLORS[st] }} title={meta.question}>
+                    Estado: {meta.label.toLowerCase()}
+                  </span>
+                );
+              })()}
+              <span className="num flex items-center gap-1 text-[9.5px] text-faint" title="Percepción por grupo (dir·doc·adm·est·ali)">
+                {ACTOR_GROUPS.map((g) => (
+                  <span key={g.key} className="grid h-4.5 w-4.5 place-items-center rounded bg-surface-2 px-1 font-bold text-ink-soft">
+                    {responsesOf(v.id)[g.key]}
+                  </span>
+                ))}
+                <span className="ml-0.5">por grupo</span>
+              </span>
             </div>
             {/* puntuación AlgoritmoT-IES */}
             <div className="mt-2 rounded-lg bg-surface-2/70 px-3 py-2.5">

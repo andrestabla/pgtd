@@ -400,3 +400,55 @@ test("impacto internacional: ordenado y con vínculos tipificados", () => {
   }
   for (const c of INTERNATIONAL_IMPACT) assert.ok(c.tipo.length > 10, c.country);
 });
+
+/* ─── actores y estados de práctica ─── */
+
+import { ACTOR_GROUPS, responsesOf, weightedPerception, dissensusOf, topDissensus } from "../src/data/actores";
+import { practiceState, practiceStateCounts, PRACTICE_STATES } from "../src/lib/ies";
+
+test("actores: los pesos de los 5 grupos suman 1", () => {
+  assert.equal(ACTOR_GROUPS.length, 5);
+  const w = ACTOR_GROUPS.reduce((a, g) => a + g.weight, 0);
+  assert.ok(Math.abs(w - 1) < 1e-9);
+});
+
+test("actores: la percepción ponderada converge con la agregada salvo disensos autorales", () => {
+  const strong = new Set(topDissensus(2).map((d) => d.id));
+  for (const v of VARIABLES) {
+    const wp = weightedPerception(v.id);
+    assert.ok(wp >= 1 && wp <= 5, v.id);
+    if (!strong.has(v.id)) {
+      assert.ok(Math.abs(wp - v.perception) <= 0.8,
+        `${v.id}: ponderada ${wp.toFixed(2)} vs agregada ${v.perception}`);
+    }
+  }
+});
+
+test("actores: los disensos autorales aparecen y con la dirección correcta", () => {
+  const tops = topDissensus(2);
+  const ids = tops.map((d) => d.id);
+  assert.ok(ids.includes("AV-TEC-3"), "conectividad: estudiantes del sur la sufren");
+  assert.ok(ids.includes("IN-TEC-2"), "repositorio: práctica invisible entre grupos");
+  const conect = dissensusOf("AV-TEC-3");
+  assert.equal(conect.lowGroup, "estudiantes");
+  const snies = dissensusOf("AR-DAT-2");
+  assert.equal(snies.lowGroup, "administrativos"); // Planeación sabe la verdad
+  assert.ok(tops.length >= 4 && tops.length <= 12, "disensos acotados: hallazgo, no ruido");
+});
+
+test("estados de práctica: derivación D/I/K y distribución completa", () => {
+  const counts = practiceStateCounts();
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  assert.equal(total, VARIABLES.length);
+  assert.equal(PRACTICE_STATES.length, 5);
+  // reglas de derivación
+  const mk = (d: number, i: number, k: number) =>
+    practiceState({ ...VARIABLES[0], evidence: { d, i, k } });
+  assert.equal(mk(0, 0, 0), "AUSENTE");
+  assert.equal(mk(2, 0, 0), "DISPONIBILIDAD");
+  assert.equal(mk(2, 2, 0), "ADOPCION");
+  assert.equal(mk(3, 3, 1), "INTEGRACION");
+  assert.equal(mk(3, 3, 3), "IMPACTO");
+  // la historia del diagnóstico: pocas prácticas integradas o con impacto
+  assert.ok(counts.INTEGRACION + counts.IMPACTO < counts.DISPONIBILIDAD + counts.ADOPCION);
+});

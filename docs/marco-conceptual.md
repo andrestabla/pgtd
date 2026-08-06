@@ -189,6 +189,8 @@ exista fundamento psicométrico — ambas cosas por mandato del informe.
 | Las salvaguardas capan el promedio (1.11) | AIQ-IES ≤ 59 mientras no exista inventario de sistemas de IA |
 | El puntaje sin cobertura de evidencia engaña (1.11) | IIES y cobertura se muestran siempre juntos |
 | La prioridad es compuesta, no solo impacto×factibilidad (1.11) | Ranking 6 criterios en M5 con desglose visible |
+| El agregado pondera por grupo de actores, no por cabeza (1.11) | 5 grupos con pesos 20/25/20/25/10; disenso rango ≥ 2 como hallazgo |
+| Disponibilidad ≠ adopción ≠ integración ≠ impacto (1.11) | Estado de práctica derivado de D/I/K por variable, con distribución en el tablero |
 
 Estas reglas están implementadas en `src/lib/logic.ts` y `src/lib/ies.ts`,
 expuestas por `/api/td/*`; el panel y los módulos las consumen.
