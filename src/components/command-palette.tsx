@@ -1,0 +1,208 @@
+"use client";
+
+// Buscador global (⌘K / Ctrl+K): variables del instrumento, KPI,
+// iniciativas, tareas, programas, personas, dominios y módulos — todo
+// navega a su ruta profunda. Índice local: no requiere red.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { VARIABLES, DOMAINS } from "@/data/instrument";
+import { KPI_CATALOG, INITIATIVES_FULL } from "@/data/cmi";
+import { TASKS, PEOPLE } from "@/data/proyectos";
+import { PROGRAMS } from "@/data/portfolio";
+import { Search, CornerDownLeft } from "lucide-react";
+
+type Entry = {
+  id: string;
+  group: string;
+  title: string;
+  sub: string;
+  href: string;
+  haystack: string;            // texto normalizado para buscar
+};
+
+const norm = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+function buildIndex(): Entry[] {
+  const e: Entry[] = [];
+  for (const v of VARIABLES) {
+    e.push({
+      id: v.id, group: "Variables del instrumento",
+      title: `${v.id} · ${v.name}`, sub: v.frame,
+      href: `/panel/madurez/variables/${v.id}`,
+      haystack: norm(`${v.id} ${v.name} ${v.desc} ${v.frame}`),
+    });
+  }
+  for (const k of KPI_CATALOG) {
+    e.push({
+      id: k.code, group: "Indicadores",
+      title: `${k.code} · ${k.name}`, sub: `${k.unit} · ${k.frequency}`,
+      href: "/panel/kpi",
+      haystack: norm(`${k.code} ${k.name} ${k.definition}`),
+    });
+  }
+  for (const i of INITIATIVES_FULL) {
+    e.push({
+      id: i.id, group: "Iniciativas",
+      title: `${i.id.toUpperCase()} · ${i.name}`, sub: i.subsistema,
+      href: `/panel/iniciativas/${i.id}`,
+      haystack: norm(`${i.id} ${i.name} ${i.objetivo}`),
+    });
+  }
+  for (const t of TASKS) {
+    e.push({
+      id: t.id, group: "Tareas",
+      title: `${t.id} · ${t.title}`, sub: `vence ${t.due}`,
+      href: `/panel/proyectos/${t.iniId}`,
+      haystack: norm(`${t.id} ${t.title} ${t.desc}`),
+    });
+  }
+  for (const p of PROGRAMS) {
+    e.push({
+      id: p.code, group: "Programas",
+      title: `${p.code} · ${p.name}`, sub: `${p.campus} · ${p.level}`,
+      href: `/panel/benchmark/${p.code}`,
+      haystack: norm(`${p.code} ${p.name} ${p.faculty} ${p.campus}`),
+    });
+  }
+  for (const p of PEOPLE) {
+    e.push({
+      id: p.id, group: "Personas",
+      title: p.name, sub: p.cargo,
+      href: "/panel/proyectos",
+      haystack: norm(`${p.name} ${p.cargo} ${p.dependencia}`),
+    });
+  }
+  for (const d of DOMAINS) {
+    e.push({
+      id: d.id, group: "Dominios",
+      title: d.name, sub: "dominio diagnóstico",
+      href: "/panel/madurez/dominios",
+      haystack: norm(`${d.name} ${d.desc}`),
+    });
+  }
+  const MODULES: [string, string, string][] = [
+    ["Panel", "estado general", "/panel"],
+    ["Madurez (M1)", "diagnóstico por línea y dimensión", "/panel/madurez/resumen"],
+    ["Captura A3", "aplicar la medición", "/panel/madurez/captura"],
+    ["Índices IES", "IIES, matriz 4×7, AIQ", "/panel/madurez/indices"],
+    ["Registros calificados", "Decreto 1330", "/panel/madurez/registros"],
+    ["Comparación (M2)", "benchmark y territorio", "/panel/benchmark"],
+    ["Capacidades (M3)", "cuadro de mando integral", "/panel/capacidades"],
+    ["Indicadores (M4)", "KPI de la educación digital", "/panel/kpi"],
+    ["Ruta (M5)", "roadmap y priorización", "/panel/ruta"],
+    ["Iniciativas (M6)", "seguimiento profundo", "/panel/iniciativas"],
+    ["Proyectos (GP)", "plan de trabajo", "/panel/proyectos"],
+    ["Inteligencia (M7)", "BI institucional", "/panel/bi"],
+    ["Metodología", "convenciones y fórmulas", "/panel/metodologia"],
+  ];
+  for (const [title, sub, href] of MODULES) {
+    e.push({ id: href, group: "Módulos", title, sub, href, haystack: norm(`${title} ${sub}`) });
+  }
+  return e;
+}
+
+export function CommandPalette() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const index = useMemo(buildIndex, []);
+
+  // ⌘K / Ctrl+K abre; Esc cierra
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setOpen((o) => !o);
+        setQ("");
+        setSel(0);
+      }
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 30); }, [open]);
+
+  const results = useMemo(() => {
+    const terms = norm(q).split(/\s+/).filter(Boolean);
+    if (terms.length === 0) {
+      return index.filter((e) => e.group === "Módulos").slice(0, 10);
+    }
+    return index
+      .filter((e) => terms.every((t) => e.haystack.includes(t)))
+      .slice(0, 14);
+  }, [q, index]);
+
+  const go = useCallback((e: Entry) => {
+    setOpen(false);
+    router.push(e.href);
+  }, [router]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60]">
+      <div className="absolute inset-0 bg-navy-deep/50 backdrop-blur-[2px]" onClick={() => setOpen(false)} />
+      <div className="absolute left-1/2 top-[12vh] w-[min(620px,92vw)] -translate-x-1/2 overflow-hidden rounded-2xl bg-surface"
+        style={{ boxShadow: "var(--e3)" }}>
+        <div className="flex items-center gap-2.5 border-b border-line px-4 py-3">
+          <Search size={16} className="shrink-0 text-muted" />
+          <input ref={inputRef} type="text" value={q}
+            onChange={(e) => { setQ(e.target.value); setSel(0); }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => Math.min(s + 1, results.length - 1)); }
+              if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); }
+              if (e.key === "Enter" && results[sel]) go(results[sel]);
+            }}
+            placeholder="Buscar variables, KPI, iniciativas, tareas, programas, personas…"
+            className="min-w-0 flex-1 bg-transparent text-[14px] text-ink outline-none placeholder:text-faint" />
+          <kbd className="num rounded bg-surface-2 px-1.5 py-0.5 text-[9px] font-bold text-faint">ESC</kbd>
+        </div>
+        <div className="max-h-[54vh] overflow-y-auto py-1.5">
+          {results.length === 0 && (
+            <p className="px-4 py-6 text-center text-[12.5px] italic text-faint">
+              Sin resultados para «{q}».
+            </p>
+          )}
+          {results.map((e, i) => {
+            const showGroup = i === 0 || results[i - 1].group !== e.group;
+            return (
+              <div key={e.group + e.id}>
+                {showGroup && <div className="label px-4 pb-1 pt-2 !text-[8px]">{e.group}</div>}
+                <button onClick={() => go(e)} onMouseEnter={() => setSel(i)}
+                  className={`flex w-full items-center gap-3 px-4 py-2 text-left ${
+                    sel === i ? "bg-cyan-wash" : ""}`}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-semibold text-ink">{e.title}</span>
+                    <span className="block truncate text-[10.5px] text-faint">{e.sub}</span>
+                  </span>
+                  {sel === i && <CornerDownLeft size={13} className="shrink-0 text-cyan-deep" />}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <div className="border-t border-line px-4 py-2 text-[9.5px] text-faint">
+          ↑↓ navegar · Enter abrir · las variables, iniciativas, tareas y programas abren su ficha
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Botón de la topbar que abre la paleta (dispara el atajo). */
+export function SearchButton() {
+  return (
+    <button
+      onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))}
+      className="hidden items-center gap-2 rounded-full bg-surface-2 px-3 py-1.5 text-[11.5px] text-muted transition-colors hover:text-ink sm:flex"
+      title="Buscar (⌘K)">
+      <Search size={13} /> Buscar…
+      <kbd className="num rounded bg-surface px-1.5 py-0.5 text-[9px] font-bold text-faint shadow-sm">⌘K</kbd>
+    </button>
+  );
+}

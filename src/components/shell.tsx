@@ -13,6 +13,7 @@ import {
   PanelLeftClose, PanelLeftOpen, Bell, ShieldAlert, AlertTriangle, Info, AtSign, CheckCheck,
 } from "lucide-react";
 import { AlgoritmoMark } from "@/components/logo";
+import { CommandPalette, SearchButton } from "@/components/command-palette";
 import { INSTITUTION } from "@/data/demo";
 
 function PublicLinkButton() {
@@ -326,6 +327,7 @@ export function AppShell({ children, user }: {
           </span>
 
           <div className="ml-auto flex items-center gap-2.5">
+            <SearchButton />
             <NotificationsBell />
             <PublicLinkButton />
             <div className="flex items-center gap-2.5 pl-1">
@@ -347,6 +349,9 @@ export function AppShell({ children, user }: {
           Algoritmo T S.A.S. · PGTD · Universidad Popular del Cesar
         </footer>
       </div>
+
+      {/* buscador global (⌘K) */}
+      <CommandPalette />
     </div>
   );
 }
