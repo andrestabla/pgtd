@@ -356,3 +356,47 @@ test("IES: toda variable tiene d7, percepción 1-5 y evidencia 0-4", () => {
     }
   }
 });
+
+/* ─── huella territorial e impacto ─── */
+
+import {
+  MUNI_IMPACT, NATIONAL_IMPACT, INTERNATIONAL_IMPACT, LENS_META,
+  conveniosTotales, conveniosTerritorio,
+} from "../src/data/territorio";
+import { CO_PATHS } from "../src/data/geo";
+import { MUNICIPALITIES } from "../src/data/demo";
+
+test("territorio: los convenios suman el valor vigente del KPI EX-01", () => {
+  const ex01 = KPI_CATALOG.find((k) => k.code === "EX-01")!;
+  const latest = ex01.series[ex01.series.length - 1].value;
+  assert.equal(conveniosTotales(), latest);
+  assert.ok(conveniosTerritorio() > conveniosTotales() * 0.6, "la mayoría ejecuta en el departamento");
+});
+
+test("territorio: los 25 municipios tienen métricas de impacto y las 3 lentes metadatos", () => {
+  assert.equal(Object.keys(MUNI_IMPACT).length, 25);
+  for (const m of MUNICIPALITIES) {
+    assert.ok(MUNI_IMPACT[m.name] !== undefined, m.name);
+  }
+  for (const lens of ["cobertura", "investigacion", "extension"] as const) {
+    assert.ok(LENS_META[lens].lectura.length > 60, lens);
+  }
+});
+
+test("impacto nacional: todos los departamentos existen en el mapa", () => {
+  const names = new Set(CO_PATHS.map((p) => p.name));
+  for (const d of NATIONAL_IMPACT) {
+    assert.ok(names.has(d.dept), `departamento no mapeado: ${d.dept}`);
+  }
+  // ordenado descendente por coautorías (para las barras)
+  for (let i = 1; i < NATIONAL_IMPACT.length; i++) {
+    assert.ok(NATIONAL_IMPACT[i].coautorias <= NATIONAL_IMPACT[i - 1].coautorias);
+  }
+});
+
+test("impacto internacional: ordenado y con vínculos tipificados", () => {
+  for (let i = 1; i < INTERNATIONAL_IMPACT.length; i++) {
+    assert.ok(INTERNATIONAL_IMPACT[i].coautorias <= INTERNATIONAL_IMPACT[i - 1].coautorias);
+  }
+  for (const c of INTERNATIONAL_IMPACT) assert.ok(c.tipo.length > 10, c.country);
+});

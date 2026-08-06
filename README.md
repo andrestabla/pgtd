@@ -111,7 +111,9 @@ alertas y consistencia del resumen ejecutivo.
 - 32 evidencias tipificadas con estado de verificación
 - Portafolio académico de 33 programas (13.374 estudiantes) por facultad,
   sede, modalidad, % de créditos virtuales, deserción, Saber Pro y equilibrio
-- Matrícula municipal en los 25 municipios del Cesar
+- Huella territorial con 3 lentes por municipio (matrícula, producción de
+  investigación, convenios de extensión) + impacto nacional (12 departamentos
+  con coautorías) e internacional (8 países); consistencia con el KPI EX-01
 
 ## Estructura
 

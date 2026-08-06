@@ -410,8 +410,16 @@ export function ColombiaMap() {
 const COV_COLOR = { alta: "var(--cyan-deep)", media: "var(--cyan-fill)", baja: "var(--line-strong)" } as const;
 const COV_R = { 3: 7.5, 2: 5, 1: 3.4 } as const;
 
-export function CesarMap({ munis, highlight }: { munis: Muni[]; highlight?: string | null }) {
+/** Mapa del Cesar con tres lentes: cobertura (peso/cobertura del municipio) o
+    un mapa de valores (producción, convenios) con radio ∝ √valor. */
+export function CesarMap({ munis, highlight, values, lensColor, lensDeep, unit }: {
+  munis: Muni[]; highlight?: string | null;
+  values?: Record<string, number>;
+  lensColor?: string; lensDeep?: string; unit?: string;
+}) {
   const gid = useId();
+  const maxV = values ? Math.max(1, ...Object.values(values)) : 1;
+  const rOf = (v: number) => (v <= 0 ? 2.2 : 3 + Math.sqrt(v / maxV) * 10.5);
   return (
     <svg viewBox={`0 0 ${CESAR_VIEW.w} ${CESAR_VIEW.h}`} className="w-full h-auto" role="img"
       aria-label="Mapa del departamento del Cesar con sus 25 municipios">
@@ -425,24 +433,71 @@ export function CesarMap({ munis, highlight }: { munis: Muni[]; highlight?: stri
       {munis.map((m) => {
         const [x, y] = projectCesar(m.lon, m.lat);
         const dim = highlight && m.subregion !== highlight;
+        const v = values?.[m.name] ?? 0;
+        const r = values ? rOf(v) : COV_R[m.weight];
+        const fill = values
+          ? (v <= 0 ? "var(--line-strong)" : v >= maxV * 0.4 ? (lensDeep ?? "var(--cyan-deep)") : (lensColor ?? "var(--cyan-fill)"))
+          : COV_COLOR[m.coverage];
         return (
           <g key={m.name} opacity={dim ? 0.18 : 1} style={{ transition: "opacity .25s" }}>
-            {m.name === "Valledupar" && (
+            {m.name === "Valledupar" && !values && (
               <circle cx={x} cy={y} r="13" fill="none" stroke="var(--cyan-deep)"
                 strokeWidth="1.4" className="pulse-ring" />
             )}
-            <circle cx={x} cy={y} r={COV_R[m.weight]} fill={COV_COLOR[m.coverage]}
+            <circle cx={x} cy={y} r={r} fill={fill} fillOpacity={values ? 0.88 : 1}
               stroke="var(--surface)" strokeWidth="1.4">
-              <title>{`${m.name} · subregión ${m.subregion} · cobertura ${m.coverage}`}</title>
+              <title>{values
+                ? `${m.name}: ${v} ${unit ?? ""}`.trim()
+                : `${m.name} · subregión ${m.subregion} · cobertura ${m.coverage}`}</title>
             </circle>
+            {values && v > 0 && r >= 7 && (
+              <text x={x} y={y + 2.6} textAnchor="middle" fontSize="7.5" fontWeight={800} fill="#fff">
+                {v}
+              </text>
+            )}
             {m.label && (
               <text x={x + m.label.dx} y={y + m.label.dy} textAnchor={m.label.anchor}
                 fontSize="8.8" fontWeight={m.weight === 3 ? 800 : 500}
-                fill={m.weight === 3 ? "var(--cyan-deep)" : "var(--ink-soft)"}>
+                fill={m.weight === 3 ? (lensDeep ?? "var(--cyan-deep)") : "var(--ink-soft)"}>
                 {m.name}
               </text>
             )}
           </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** Colombia con intensidad por departamento (coautorías / convenios). */
+export function ColombiaImpactMap({ values, selected, onSelect }: {
+  values: Record<string, number>;
+  selected?: string | null;
+  onSelect?: (dept: string | null) => void;
+}) {
+  const maxV = Math.max(1, ...Object.values(values));
+  const fillOf = (name: string, cesar: boolean) => {
+    if (cesar) return "var(--navy)";
+    const v = values[name] ?? 0;
+    if (v <= 0) return "var(--surface-3)";
+    const t = Math.sqrt(v / maxV);
+    return `color-mix(in srgb, var(--cyan-deep) ${Math.round(18 + t * 78)}%, white)`;
+  };
+  return (
+    <svg viewBox={`0 0 ${CO_VIEW.w} ${CO_VIEW.h}`} className="w-full h-auto" role="img"
+      aria-label="Mapa de Colombia con la intensidad de colaboración por departamento">
+      {CO_PATHS.map((p) => {
+        const v = values[p.name] ?? 0;
+        const isSel = selected === p.name;
+        return (
+          <path key={p.name} d={p.d}
+            fill={fillOf(p.name, p.cesar)}
+            stroke={isSel ? "var(--gold)" : p.cesar ? "var(--navy-deep)" : "var(--line-strong)"}
+            strokeWidth={isSel ? 1.8 : p.cesar ? 1.1 : 0.5}
+            style={{ cursor: v > 0 && onSelect ? "pointer" : "default", transition: "fill .2s" }}
+            onClick={() => v > 0 && onSelect?.(isSel ? null : p.name)}>
+            <title>{p.cesar ? "Cesar (UPC)" : `${p.name}: ${v} coautorías`}</title>
+          </path>
         );
       })}
     </svg>
