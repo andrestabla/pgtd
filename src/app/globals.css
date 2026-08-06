@@ -242,6 +242,17 @@ body {
 
 /* ─── movimiento ─── */
 
+/* ─── impresión: el informe ejecutivo se imprime limpio ─── */
+@media print {
+  aside, header, footer, .no-print { display: none !important; }
+  main { max-width: 100% !important; padding: 0 !important; }
+  body { background: white !important; }
+  .panel { box-shadow: none !important; border: 1px solid var(--line-strong) !important; break-inside: avoid; }
+  .rise, .rise-1, .rise-2, .rise-3, .rise-4 { animation: none !important; }
+  .print-break { break-before: page; }
+  div[class*="lg:pl-"] { padding-left: 0 !important; }
+}
+
 @keyframes rise {
   from { opacity: 0; transform: translateY(12px) scale(0.995); }
   to { opacity: 1; transform: translateY(0) scale(1); }

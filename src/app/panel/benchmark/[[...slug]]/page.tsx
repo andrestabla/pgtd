@@ -18,6 +18,7 @@ import {
 import { MUNICIPALITIES, SUBREGIONS, BENCHMARK, QUADRANT, fmtNum } from "@/data/demo";
 import { PROGRAMS, MUNI_ENROLLMENT, portfolioStats, FACULTIES, type Program } from "@/data/portfolio";
 import { regCalOf } from "@/data/regcal";
+import { downloadCsv } from "@/lib/csv";
 import { StatCard } from "@/components/ui";
 import {
   ArrowLeft, ArrowRight, GraduationCap, Wallet, ScrollText,
@@ -329,6 +330,13 @@ export default function BenchmarkPage() {
               Limpiar filtros
             </button>
           )}
+          <button
+            onClick={() => downloadCsv("portafolio-upc",
+              ["Código", "Programa", "Nivel", "Facultad", "Sede", "Modalidad", "Matrícula", "% créd. virtuales", "Deserción %", "Saber Pro", "Equilibrio"],
+              programs.map((p) => [p.code, p.name, p.level, p.faculty, p.campus, p.modality, p.students, p.virtualCredits, p.dropout, p.saberPro ?? "", p.breakEven ? "Sí" : "No"]))}
+            className="chip cursor-pointer">
+            CSV ↓
+          </button>
           <span className="num ml-auto text-[11px] text-faint">
             {programs.length} de {PROGRAMS.length} programas
           </span>
