@@ -5,7 +5,7 @@ import { UserProvider } from "@/components/user-context";
 
 export default async function PanelLayout({ children }: LayoutProps<"/panel">) {
   const user = await getSession();
-  if (!user) redirect("/");
+  if (!user) redirect("/login");
   return (
     <UserProvider user={user}>
       <AppShell user={user}>{children}</AppShell>

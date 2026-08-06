@@ -208,7 +208,7 @@ export function AppShell({ children, user }: {
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/");
+    router.push("/login");
     router.refresh();
   };
 
