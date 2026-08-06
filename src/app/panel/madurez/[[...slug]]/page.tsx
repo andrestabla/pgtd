@@ -411,7 +411,7 @@ export default function MadurezPage() {
                     <Link key={k.code} href="/panel/kpi" className="chip chip-gold">{k.code}</Link>
                   ))}
                   {inis.map((x) => (
-                    <Link key={x.id} href="/panel/iniciativas" className="chip chip-cyan">
+                    <Link key={x.id} href={`/panel/iniciativas/${x.id}`} className="chip chip-cyan">
                       {x.name.length > 30 ? x.name.slice(0, 29) + "…" : x.name}
                     </Link>
                   ))}

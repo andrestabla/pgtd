@@ -146,7 +146,7 @@ export default function CapacidadesPage() {
                     ) : (
                       <div className="space-y-1.5">
                         {objInis.map((i) => (
-                          <Link key={i.id} href="/panel/iniciativas"
+                          <Link key={i.id} href={`/panel/iniciativas/${i.id}`}
                             className="block rounded-lg bg-gold-wash px-3 py-2 transition-transform hover:translate-x-0.5">
                             <div className="text-[12px] font-semibold text-ink">{i.name}</div>
                             <div className="num mt-0.5 text-[10px]" style={{ color: "var(--gold)" }}>
