@@ -10,8 +10,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader, Card, CardHeader, LevelBadge, StateDot } from "@/components/ui";
 import { AccessChip } from "@/components/user-context";
-import { MaturityRadar, MaturityHeatmap } from "@/components/charts";
-import { LINES, DIMENSIONS, SCORES, LEVELS, EVIDENCES, fmtNum } from "@/data/demo";
+import { MaturityRadar, MaturityHeatmap, MiniRadar } from "@/components/charts";
+import { LINES, DIMENSIONS, SCORES, LEVELS, EVIDENCES, fmtNum, lineScore } from "@/data/demo";
 import { ASSESSMENTS, responsible } from "@/data/cmi";
 import {
   VARIABLES, variablesOf, gapOf, DOMAINS, domainScore, type Variable, type Frame,
@@ -25,7 +25,7 @@ import { ACTOR_GROUPS, responsesOf, topDissensus } from "@/data/actores";
 import { KPIS, INITIATIVES } from "@/data/demo";
 import {
   FileText, X, CheckCircle2, Clock3, History, ChevronDown, BookOpenCheck,
-  Search, Lightbulb, AlertCircle, Layers, ScrollText, Sigma, ShieldAlert,
+  Search, Lightbulb, AlertCircle, Layers, ScrollText, Sigma, ShieldAlert, HelpCircle,
 } from "lucide-react";
 
 const LEVEL_BG = ["", "var(--n1)", "var(--n2)", "var(--n3)", "var(--n4)", "var(--n5)"];
@@ -44,6 +44,16 @@ const TABS: { id: Tab; label: string; icon: typeof Layers }[] = [
   { id: "registros", label: "Registros calificados", icon: ScrollText },
   { id: "ies", label: "Índices IES", icon: Sigma },
 ];
+
+// ancla de la página de Metodología que explica las convenciones de cada vista
+const HELP_ANCHOR: Record<Tab, string> = {
+  resumen: "escala", variables: "variables", dominios: "dominios",
+  registros: "registros", ies: "ies",
+};
+
+const DIM_SHORT: Record<string, string> = {
+  organizacional: "Org.", misional: "Mis.", tecnologica: "Tec.", datos: "Dat.",
+};
 
 export default function MadurezPage() {
   const [tab, setTab] = useState<Tab>("resumen");
@@ -91,6 +101,11 @@ export default function MadurezPage() {
             {t.label}
           </button>
         ))}
+        <Link href={`/panel/metodologia#${HELP_ANCHOR[tab]}`}
+          className="ml-auto flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12px] font-semibold text-muted transition-colors hover:text-cyan-deep"
+          title="Cómo leer esta vista: escalas, códigos y umbrales">
+          <HelpCircle size={14} /> Convenciones
+        </Link>
       </div>
 
       {/* ═══════════ RESUMEN ═══════════ */}
@@ -131,6 +146,64 @@ export default function MadurezPage() {
                 ))}
               </div>
             </Card>
+          </div>
+
+          {/* radares por línea misional: las 4 dimensiones de cada línea */}
+          <div className="rise rise-2 mt-6">
+            <div className="kicker mb-3">Radar por línea misional · sus cuatro dimensiones</div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {LINES.map((l) => {
+                const axes = DIMENSIONS.map((d) => ({
+                  label: DIM_SHORT[d.key],
+                  value: SCORES[l.n][d.key].value,
+                  target: SCORES[l.n][d.key].target,
+                }));
+                return (
+                  <Card key={l.n} hover>
+                    <div className="flex items-baseline justify-between gap-2 px-4 pt-3.5">
+                      <span className="truncate text-[12.5px] font-extrabold text-ink">
+                        {l.code} <span className="font-semibold text-ink-soft">{l.short}</span>
+                      </span>
+                      <span className="num shrink-0 text-[14px] font-extrabold" style={{ color: l.color }}>
+                        {fmtNum(lineScore(l.n), 1)}
+                      </span>
+                    </div>
+                    <div className="px-2 pb-1"><MiniRadar axes={axes} color={l.color} /></div>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* radares por dimensión: las 4 líneas vistas desde cada dimensión */}
+          <div className="rise rise-3 mt-5">
+            <div className="kicker mb-3">Radar por dimensión · las cuatro líneas comparadas</div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {DIMENSIONS.map((d) => {
+                const axes = LINES.map((l) => ({
+                  label: l.code,
+                  value: SCORES[l.n][d.key].value,
+                  target: SCORES[l.n][d.key].target,
+                }));
+                const avg = LINES.reduce((a, l) => a + SCORES[l.n][d.key].value, 0) / LINES.length;
+                return (
+                  <Card key={d.key} hover>
+                    <div className="flex items-baseline justify-between gap-2 px-4 pt-3.5">
+                      <span className="truncate text-[12.5px] font-extrabold text-ink">{d.name}</span>
+                      <span className="num shrink-0 text-[14px] font-extrabold text-cyan-deep">
+                        {fmtNum(avg, 1)}
+                      </span>
+                    </div>
+                    <div className="px-2 pb-1"><MiniRadar axes={axes} color="var(--cyan)" /></div>
+                  </Card>
+                );
+              })}
+            </div>
+            <p className="mt-3 text-[11px] leading-snug text-faint">
+              Trazo de color: medición vigente (A2). Línea dorada punteada: meta a 24 meses.
+              La lectura cruzada muestra dónde está el rezago: por línea (¿qué dimensión frena a 4.1?)
+              y por dimensión (¿en qué línea es más débil la capa de datos?).
+            </p>
           </div>
 
           {/* ciclo de medición */}

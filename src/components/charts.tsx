@@ -139,6 +139,80 @@ export function MaturityRadar({ size = 380 }: { size?: number }) {
   );
 }
 
+/* ─── Radar compacto reutilizable (N ejes) ──────────────────────────────── */
+
+/** Radar pequeño para una línea (ejes = dimensiones) o una dimensión
+    (ejes = líneas). Trazo en el color propio, meta punteada en dorado. */
+export function MiniRadar({ axes, color = "var(--cyan)", size = 200, max = 5 }: {
+  axes: { label: string; value: number; target?: number }[];
+  color?: string; size?: number; max?: number;
+}) {
+  const n = axes.length;
+  const cx = size / 2, cy = size / 2 + 3;
+  const rMax = size * 0.28;
+  const pt = (i: number, v: number): [number, number] => {
+    const ang = ((2 * Math.PI) / n) * i - Math.PI / 2;
+    const r = (v / max) * rMax;
+    return [cx + r * Math.cos(ang), cy + r * Math.sin(ang)];
+  };
+  const poly = (vals: number[]) =>
+    vals.map((v, i) => pt(i, v).map((x) => x.toFixed(1)).join(",")).join(" ");
+  const hasTarget = axes.some((a) => a.target !== undefined);
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} className="w-full h-auto" role="img"
+      aria-label={`Radar: ${axes.map((a) => `${a.label} ${a.value}`).join(", ")}`}>
+      {[1, 2, 3, 4, 5].map((lvl) => (
+        <polygon key={lvl} points={poly(axes.map(() => lvl))} fill="none"
+          stroke={lvl === max ? "var(--line-strong)" : "var(--line)"} strokeWidth={0.8} />
+      ))}
+      {axes.map((_, i) => {
+        const [x, y] = pt(i, max);
+        return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="var(--line)" strokeWidth={0.8} />;
+      })}
+
+      {hasTarget && (
+        <polygon points={poly(axes.map((a) => a.target ?? a.value))}
+          fill="rgba(168,122,20,.05)" stroke="var(--gold)"
+          strokeWidth="1.2" strokeDasharray="4 3.5" />
+      )}
+
+      <polygon points={poly(axes.map((a) => a.value))}
+        fill={`color-mix(in srgb, ${color} 15%, transparent)`}
+        stroke={color} strokeWidth="2" strokeLinejoin="round" />
+      {axes.map((a, i) => {
+        const [x, y] = pt(i, a.value);
+        return (
+          <circle key={i} cx={x} cy={y} r="3.6" fill={color}
+            stroke="var(--surface)" strokeWidth="2" />
+        );
+      })}
+
+      {/* etiquetas: nombre del eje + valor */}
+      {axes.map((a, i) => {
+        const ang = ((2 * Math.PI) / n) * i - Math.PI / 2;
+        const cos = Math.cos(ang), sin = Math.sin(ang);
+        const lx = cx + (rMax + 12) * cos;
+        const ly = cy + (rMax + 12) * sin;
+        const anchor = Math.abs(cos) < 0.35 ? "middle" : cos > 0 ? "start" : "end";
+        const dy = sin < -0.3 ? -12 : sin > 0.3 ? 10 : -3;
+        return (
+          <g key={a.label} textAnchor={anchor}>
+            <text x={lx} y={ly + dy} fontSize="9.5" fontWeight={650} fill="var(--ink-soft)">
+              {a.label}
+            </text>
+            <text x={lx} y={ly + dy + 12} className="num" fontSize="10.5" fontWeight={800} fill={color}>
+              {a.value.toFixed(1).replace(".", ",")}
+              {a.target !== undefined && (
+                <tspan fontSize="8" fontWeight={600} fill="var(--faint)"> →{a.target}</tspan>
+              )}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 /* ─── Mapa de calor línea × dimensión (grid) ────────────────────────────── */
 
 const LEVEL_BG = ["", "var(--n1)", "var(--n2)", "var(--n3)", "var(--n4)", "var(--n5)"];
