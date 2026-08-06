@@ -69,7 +69,7 @@ export function Card({ children, className = "", hover = false }:
 }
 
 export function CardHeader({ title, sub, right }:
-  { title: string; sub?: string; right?: ReactNode }) {
+  { title: string; sub?: ReactNode; right?: ReactNode }) {
   return (
     <div className="p-head pb-4">
       <div>
