@@ -16,6 +16,7 @@ import {
 import { AlgoritmoMark } from "@/components/logo";
 import { CommandPalette, SearchButton } from "@/components/command-palette";
 import { INSTITUTION } from "@/data/demo";
+import { applyAccent } from "@/lib/branding";
 
 function PublicLinkButton() {
   const [state, setState] = useState<"idle" | "busy" | "copied">("idle");
@@ -192,6 +193,17 @@ export function AppShell({ children, user }: {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
+  // branding: nombres y acento definidos en /panel/admin/branding
+  const [brand, setBrand] = useState<{ institutionName: string; shortName: string; accent: string | null } | null>(null);
+  useEffect(() => {
+    fetch("/api/td/settings").then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (j?.branding) {
+        setBrand(j.branding);
+        applyAccent(j.branding.accent);
+      }
+    }).catch(() => null);
+  }, []);
+
   // el colapso persiste; se lee tras montar para no romper la hidratación
   useEffect(() => {
     setCollapsed(localStorage.getItem("pgtd-rail") === "1");
@@ -275,8 +287,8 @@ export function AppShell({ children, user }: {
             <div className="mb-3 overflow-hidden rounded-xl bg-white/[0.05] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)]">
               <div className="spine h-[2.5px]" />
               <div className="px-4 py-3">
-                <div className="text-[12.5px] font-bold text-white">{INSTITUTION.shortName}</div>
-                <div className="mt-0.5 text-[10.5px] leading-snug text-white/40">{INSTITUTION.name}</div>
+                <div className="text-[12.5px] font-bold text-white">{brand?.shortName ?? INSTITUTION.shortName}</div>
+                <div className="mt-0.5 text-[10.5px] leading-snug text-white/40">{brand?.institutionName ?? INSTITUTION.name}</div>
               </div>
             </div>
           )}

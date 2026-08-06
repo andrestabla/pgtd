@@ -1098,6 +1098,199 @@ export function updateUser(
   return { ok: true, user: u };
 }
 
+/* ═══ Integraciones (OpenAI · Cloudflare R2 · AWS SES) ═══
+   Configuración local en memoria: los secretos nunca vuelven completos al
+   cliente (se enmascaran salvo los últimos 4). Con la base conectada pasan
+   a variables de entorno del despliegue. */
+
+export type IntegrationKey = "openai" | "r2" | "ses";
+
+export type IntegrationConfig = {
+  enabled: boolean;
+  fields: Record<string, string>;    // valores crudos (solo servidor)
+  updatedBy?: string;
+  at?: string;
+};
+
+type IntegrationSpec = {
+  name: string;
+  purpose: string;
+  fields: { key: string; label: string; secret?: boolean; placeholder: string; validate: (v: string) => string | null }[];
+};
+
+const req = (label: string) => (v: string) => (v.trim() ? null : `${label} es obligatorio`);
+
+export const INTEGRATION_SPECS: Record<IntegrationKey, IntegrationSpec> = {
+  openai: {
+    name: "OpenAI",
+    purpose: "Redacción asistida de hallazgos y normalización de importaciones (opcional).",
+    fields: [
+      {
+        key: "apiKey", label: "API key", secret: true, placeholder: "sk-…",
+        validate: (v) => (/^sk-[A-Za-z0-9_-]{20,}$/.test(v.trim()) ? null : "La API key de OpenAI inicia con sk- y tiene al menos 20 caracteres"),
+      },
+      {
+        key: "model", label: "Modelo", placeholder: "gpt-4o-mini",
+        validate: req("El modelo"),
+      },
+    ],
+  },
+  r2: {
+    name: "Cloudflare R2",
+    purpose: "Almacenamiento de evidencias, logos y exportaciones (hoy: var/uploads local).",
+    fields: [
+      {
+        key: "accountId", label: "Account ID", placeholder: "32 caracteres hex",
+        validate: (v) => (/^[a-f0-9]{32}$/i.test(v.trim()) ? null : "El Account ID de Cloudflare son 32 caracteres hexadecimales"),
+      },
+      { key: "accessKeyId", label: "Access Key ID", secret: true, placeholder: "…", validate: req("El Access Key ID") },
+      { key: "secretAccessKey", label: "Secret Access Key", secret: true, placeholder: "…", validate: req("El Secret Access Key") },
+      { key: "bucket", label: "Bucket", placeholder: "pgtd", validate: req("El bucket") },
+    ],
+  },
+  ses: {
+    name: "AWS SES",
+    purpose: "Correo saliente: notificaciones, invitaciones de usuarios y resúmenes semanales.",
+    fields: [
+      {
+        key: "region", label: "Región", placeholder: "us-east-1",
+        validate: (v) => (/^[a-z]{2}-[a-z]+-\d$/.test(v.trim()) ? null : "Región AWS inválida (p. ej. us-east-1)"),
+      },
+      {
+        key: "accessKeyId", label: "Access Key ID", secret: true, placeholder: "AKIA…",
+        validate: (v) => (/^AKIA[A-Z0-9]{16}$/.test(v.trim()) ? null : "El Access Key ID de AWS inicia con AKIA (20 caracteres)"),
+      },
+      { key: "secretAccessKey", label: "Secret Access Key", secret: true, placeholder: "…", validate: req("El Secret Access Key") },
+      {
+        key: "sender", label: "Remitente verificado", placeholder: "pgtd@algoritmot.com",
+        validate: (v) => (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim()) ? null : "El remitente debe ser un correo válido"),
+      },
+    ],
+  },
+};
+
+const integrations = () => {
+  const gi = g as unknown as { __pgtdIntegrations?: Map<IntegrationKey, IntegrationConfig> };
+  if (!gi.__pgtdIntegrations) gi.__pgtdIntegrations = new Map();
+  return gi.__pgtdIntegrations;
+};
+
+const maskSecret = (v: string) => (v.length <= 4 ? "••••" : "•".repeat(Math.min(12, v.length - 4)) + v.slice(-4));
+
+/** Estado para el cliente: secretos enmascarados, nunca completos. */
+export function getIntegrationsMasked() {
+  return (Object.keys(INTEGRATION_SPECS) as IntegrationKey[]).map((key) => {
+    const spec = INTEGRATION_SPECS[key];
+    const cfg = integrations().get(key);
+    return {
+      key,
+      name: spec.name,
+      purpose: spec.purpose,
+      enabled: cfg?.enabled ?? false,
+      configured: Boolean(cfg && spec.fields.every((f) => cfg.fields[f.key]?.trim())),
+      updatedBy: cfg?.updatedBy,
+      at: cfg?.at,
+      fields: spec.fields.map((f) => ({
+        key: f.key, label: f.label, secret: Boolean(f.secret), placeholder: f.placeholder,
+        value: cfg?.fields[f.key] ? (f.secret ? maskSecret(cfg.fields[f.key]) : cfg.fields[f.key]) : "",
+      })),
+    };
+  });
+}
+
+export function setIntegration(
+  user: SessionUser,
+  key: IntegrationKey,
+  patch: { enabled?: boolean; fields?: Record<string, string> },
+): { ok: true } | { ok: false; status: number; error: string } {
+  if (!can(user, "manage_users")) {
+    return { ok: false, status: 403, error: "Solo el equipo consultor configura integraciones." };
+  }
+  const spec = INTEGRATION_SPECS[key];
+  if (!spec) return { ok: false, status: 404, error: "Integración desconocida." };
+
+  const cfg: IntegrationConfig = integrations().get(key) ?? { enabled: false, fields: {} };
+
+  if (patch.fields) {
+    for (const f of spec.fields) {
+      const raw = patch.fields[f.key];
+      if (raw === undefined || raw === "") continue;              // sin cambio
+      if (f.secret && /^•/.test(raw)) continue;                    // volvió la máscara: conservar
+      const problem = f.validate(raw);
+      if (problem) return { ok: false, status: 422, error: `${spec.name}: ${problem}.` };
+      cfg.fields[f.key] = raw.trim();
+    }
+  }
+
+  if (patch.enabled !== undefined) {
+    if (patch.enabled && !spec.fields.every((f) => cfg.fields[f.key]?.trim())) {
+      return { ok: false, status: 422, error: `${spec.name}: completa la configuración antes de activarla.` };
+    }
+    cfg.enabled = patch.enabled;
+  }
+
+  cfg.updatedBy = user.name;
+  cfg.at = new Date().toISOString();
+  integrations().set(key, cfg);
+  audit(user, "task", `int-${key}`, `integración ${spec.name} ${patch.enabled !== undefined ? (patch.enabled ? "activada" : "desactivada") : "configurada"}`);
+  return { ok: true };
+}
+
+/* ═══ Branding de la plataforma ═══ */
+
+export type Branding = {
+  institutionName: string;
+  shortName: string;
+  tagline: string;
+  accent: string | null;         // color hex del acento; null = tema Algoritmo T
+};
+
+const DEFAULT_BRANDING: Branding = {
+  institutionName: "Universidad Popular del Cesar",
+  shortName: "UPC",
+  tagline: "Soluciones digitales con sentido humano",
+  accent: null,
+};
+
+const branding = () => {
+  const gb = g as unknown as { __pgtdBranding?: Branding };
+  if (!gb.__pgtdBranding) gb.__pgtdBranding = { ...DEFAULT_BRANDING };
+  return gb.__pgtdBranding;
+};
+
+export const getBranding = (): Branding => ({ ...branding() });
+
+export function setBranding(
+  user: SessionUser,
+  patch: Partial<Branding>,
+): { ok: true; branding: Branding } | { ok: false; status: number; error: string } {
+  if (!can(user, "manage_users")) {
+    return { ok: false, status: 403, error: "Solo el equipo consultor edita el branding." };
+  }
+  const b = branding();
+  if (patch.institutionName !== undefined) {
+    if (patch.institutionName.trim().length < 5) {
+      return { ok: false, status: 422, error: "El nombre institucional es demasiado corto." };
+    }
+    b.institutionName = patch.institutionName.trim();
+  }
+  if (patch.shortName !== undefined) {
+    if (!/^[A-ZÁÉÍÓÚÑ0-9]{2,10}$/i.test(patch.shortName.trim())) {
+      return { ok: false, status: 422, error: "La sigla debe tener 2–10 caracteres alfanuméricos." };
+    }
+    b.shortName = patch.shortName.trim().toUpperCase();
+  }
+  if (patch.tagline !== undefined) b.tagline = patch.tagline.trim();
+  if (patch.accent !== undefined) {
+    if (patch.accent !== null && !/^#[0-9a-f]{6}$/i.test(patch.accent)) {
+      return { ok: false, status: 422, error: "El acento debe ser un color hex (#rrggbb) o vacío para el tema por defecto." };
+    }
+    b.accent = patch.accent;
+  }
+  audit(user, "task", "branding", "branding de la plataforma actualizado");
+  return { ok: true, branding: { ...b } };
+}
+
 /* ═══ Notificaciones: estado de lectura por usuario ═══ */
 
 const notifRead = () => {
@@ -1131,6 +1324,8 @@ export function resetStore() {
   (g as unknown as { __pgtdArchived?: Task[] }).__pgtdArchived = [];
   (g as unknown as { __pgtdNotifRead?: Map<string, Set<string>> }).__pgtdNotifRead = new Map();
   (g as unknown as { __pgtdUsers?: ManagedUser[] }).__pgtdUsers = undefined;
+  (g as unknown as { __pgtdIntegrations?: Map<string, unknown> }).__pgtdIntegrations = new Map();
+  (g as unknown as { __pgtdBranding?: Branding }).__pgtdBranding = undefined;
 }
 
 export { DEMO_TODAY, responsible };
