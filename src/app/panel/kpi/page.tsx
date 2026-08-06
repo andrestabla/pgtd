@@ -3,7 +3,7 @@
 // M4 · Indicadores: batería con serie, semáforo, dueño y periodicidad.
 
 import { useState } from "react";
-import { PageHeader, Card, DemoBanner } from "@/components/ui";
+import { PageHeader, Card } from "@/components/ui";
 import { Sparkline } from "@/components/charts";
 import { KPIS, LINES, fmtNum } from "@/data/demo";
 
@@ -15,7 +15,6 @@ export default function KpiPage() {
     <>
       <PageHeader kicker="M4 · Indicadores" title="Indicadores de la educación digital"
         desc="Cada indicador declara quién produce el dato y con qué frecuencia: deja de ser una cifra que se reconstruye a mano y pasa a ser una responsabilidad asignada." />
-      <DemoBanner />
 
       <div className="rise mb-5 flex flex-wrap gap-2">
         <button onClick={() => setLineFilter(null)}
@@ -62,7 +61,7 @@ export default function KpiPage() {
                 <Sparkline values={k.series.map((s) => s.value)} good={improving} />
               </div>
               <div className="mt-2 flex items-center justify-between">
-                <span className="mono-label">meta {fmtNum(k.target, 1)} {k.unit} · {k.frequency.toLowerCase()}</span>
+                <span className="label">meta {fmtNum(k.target, 1)} {k.unit} · {k.frequency.toLowerCase()}</span>
                 <span className="font-mono text-[10px]"
                   style={{ color: toTarget >= 85 ? "var(--ok)" : toTarget >= 55 ? "var(--warn)" : "var(--bad)" }}>
                   {Math.min(999, Math.round(toTarget))} % de la meta

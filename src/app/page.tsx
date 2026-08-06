@@ -45,7 +45,7 @@ export default function Home() {
       {/* lateral de marca */}
       <div className="relative hidden w-[46%] flex-col justify-between overflow-hidden p-10 lg:flex"
         style={{ background: "linear-gradient(160deg, #12203f 0%, #1a2d5a 45%, #0b6f88 100%)" }}>
-        <div aria-hidden className="pointer-events-none absolute inset-0"
+        <div aria-hidden className="blob pointer-events-none absolute inset-0"
           style={{
             background:
               "radial-gradient(640px 320px at 90% -8%, rgba(79,208,236,.28), transparent 60%)," +
@@ -98,16 +98,16 @@ export default function Home() {
 
           <form onSubmit={submit} className="mt-7 space-y-4">
             <label className="block">
-              <span className="mono-label">Correo</span>
+              <span className="label">Correo</span>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 autoComplete="username" required
-                className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-3.5 py-2.5 text-[14px] text-ink outline-none transition-colors focus:border-cyan focus:ring-2 focus:ring-cyan/20" />
+                className="input mt-1.5" />
             </label>
             <label className="block">
-              <span className="mono-label">Contraseña</span>
+              <span className="label">Contraseña</span>
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password" required
-                className="mt-1.5 w-full rounded-lg border border-line-strong bg-surface px-3.5 py-2.5 text-[14px] text-ink outline-none transition-colors focus:border-cyan focus:ring-2 focus:ring-cyan/20" />
+                className="input mt-1.5" />
             </label>
 
             {error && (
@@ -118,14 +118,14 @@ export default function Home() {
             )}
 
             <button type="submit" disabled={busy}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-navy px-4 py-2.5 text-[13.5px] font-bold text-white transition-all hover:brightness-110 disabled:opacity-60">
+              className="btn-primary w-full">
               {busy ? <Loader2 size={15} className="animate-spin" /> : <LogIn size={15} />}
               Entrar a la plataforma
             </button>
           </form>
 
-          <div className="mt-8 rounded-xl border border-line bg-surface p-4">
-            <div className="mono-label mb-2.5">Cuentas de demostración</div>
+          <div className="panel mt-8 p-4">
+            <div className="label mb-2.5">Cuentas de demostración</div>
             <div className="space-y-1">
               {DEMO_ACCOUNTS.map((a) => (
                 <button key={a.email} type="button"

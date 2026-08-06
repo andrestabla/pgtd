@@ -3,7 +3,7 @@
 // M6 · Seguimiento: presupuesto en tres estados + factores críticos de éxito.
 
 import { useState } from "react";
-import { PageHeader, Card, CardHeader, DemoBanner, StateDot, StatusChip, StatCard } from "@/components/ui";
+import { PageHeader, Card, CardHeader, StateDot, StatusChip, StatCard } from "@/components/ui";
 import { BudgetBar } from "@/components/charts";
 import { INITIATIVES, fmtCOP } from "@/data/demo";
 import { ChevronDown } from "lucide-react";
@@ -25,16 +25,18 @@ export default function IniciativasPage() {
     <>
       <PageHeader kicker="M6 · Seguimiento" title="Iniciativas, presupuesto y factores de éxito"
         desc="El módulo de ejecución. Cuando un factor acumula dos revisiones en rojo, la conversación se puede tener a tiempo: es el mecanismo para detectar que una iniciativa va a fracasar antes de que fracase." />
-      <DemoBanner />
 
       <div className="rise rise-1 mb-5 grid gap-4 sm:grid-cols-3">
-        <StatCard label="Presupuesto del portafolio" value={fmtCOP(totals.planned).replace("$ ", "$")}
-          foot={`${INITIATIVES.length} iniciativas`} />
+        <StatCard label="Presupuesto del portafolio" value={totals.planned / 1e6} decimals={0}
+          prefix="$ " unit="millones COP" foot={`${INITIATIVES.length} iniciativas`} />
         <StatCard label="Ejecutado + comprometido"
-          value={`${Math.round(((totals.executed + totals.committed) / totals.planned) * 100)} %`}
-          foot={fmtCOP(totals.executed + totals.committed)} />
-        <StatCard label="Factores en rojo" value={String(redFactors.length)}
-          foot="dos revisiones seguidas → conversación" />
+          value={Math.round(((totals.executed + totals.committed) / totals.planned) * 100)} unit="%"
+          foot={fmtCOP(totals.executed + totals.committed)}
+          accent="linear-gradient(90deg, var(--n4), var(--n5))" />
+        <StatCard label="Factores en rojo" value={redFactors.length}
+          unit={redFactors.length === 1 ? "factor" : "factores"}
+          foot="dos revisiones seguidas → conversación"
+          accent="linear-gradient(90deg, var(--bad), #a13c44)" />
       </div>
 
       <div className="space-y-3">
@@ -68,7 +70,7 @@ export default function IniciativasPage() {
               {isOpen && (
                 <div className="grid gap-6 border-t border-line px-5 py-5 lg:grid-cols-2">
                   <div>
-                    <div className="mono-label mb-3">Ejecución presupuestal</div>
+                    <div className="label mb-3">Ejecución presupuestal</div>
                     <BudgetBar planned={i.budgetPlanned} committed={i.budgetCommitted} executed={i.budgetExecuted} />
                     <div className="mt-3 grid grid-cols-3 gap-3">
                       {[
@@ -87,7 +89,7 @@ export default function IniciativasPage() {
                   </div>
 
                   <div>
-                    <div className="mono-label mb-3">Factores críticos de éxito</div>
+                    <div className="label mb-3">Factores críticos de éxito</div>
                     <div className="space-y-1.5">
                       {i.factors.map((f) => (
                         <div key={f.name} className="flex items-center gap-2.5 rounded-lg bg-surface-2/60 px-3 py-2">

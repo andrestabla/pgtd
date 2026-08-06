@@ -4,7 +4,7 @@
 // objetivo → capacidad → iniciativa → indicador.
 
 import { useState } from "react";
-import { PageHeader, Card, CardHeader, DemoBanner } from "@/components/ui";
+import { PageHeader, Card, CardHeader } from "@/components/ui";
 import { OBJECTIVES, CAPABILITIES, INITIATIVES, KPIS, LINES } from "@/data/demo";
 import { ChevronRight } from "lucide-react";
 
@@ -21,7 +21,6 @@ export default function CapacidadesPage() {
     <>
       <PageHeader kicker="M3 · Capacidades" title="Mapa estratégico de la educación digital"
         desc="La trazabilidad que suele perderse entre el plan de desarrollo y la ejecución: desde cada objetivo se llega a las capacidades que lo sostienen, a las iniciativas que las fortalecen y al indicador que debería moverse." />
-      <DemoBanner />
 
       <div className="grid gap-5 lg:grid-cols-3">
         {/* columna de objetivos → capacidades */}
@@ -85,14 +84,14 @@ export default function CapacidadesPage() {
             ) : (
               <div className="space-y-4">
                 <div>
-                  <div className="mono-label mb-1.5">Objetivo</div>
+                  <div className="label mb-1.5">Objetivo</div>
                   <div className="rounded-lg bg-navy px-3.5 py-2.5 text-[12.5px] font-semibold text-white">
                     {OBJECTIVES.find((o) => o.id === cap.objective)?.name}
                   </div>
                 </div>
                 <div className="flex justify-center text-faint"><ChevronRight className="rotate-90" size={15} /></div>
                 <div>
-                  <div className="mono-label mb-1.5">Capacidad</div>
+                  <div className="label mb-1.5">Capacidad</div>
                   <div className="rounded-lg border border-cyan bg-cyan-wash px-3.5 py-2.5">
                     <div className="text-[13px] font-bold text-ink">{cap.name}</div>
                     <div className="mt-0.5 font-mono text-[10.5px] text-cyan-deep">
@@ -102,7 +101,7 @@ export default function CapacidadesPage() {
                 </div>
                 <div className="flex justify-center text-faint"><ChevronRight className="rotate-90" size={15} /></div>
                 <div>
-                  <div className="mono-label mb-1.5">Iniciativas</div>
+                  <div className="label mb-1.5">Iniciativas</div>
                   {relatedInis.length === 0 ? (
                     <p className="text-[12px] italic text-faint">Sin iniciativas asociadas aún.</p>
                   ) : (
@@ -120,7 +119,7 @@ export default function CapacidadesPage() {
                 </div>
                 <div className="flex justify-center text-faint"><ChevronRight className="rotate-90" size={15} /></div>
                 <div>
-                  <div className="mono-label mb-1.5">Indicadores que deben moverse</div>
+                  <div className="label mb-1.5">Indicadores que deben moverse</div>
                   {relatedKpis.length === 0 ? (
                     <p className="text-[12px] italic text-faint">Sin indicadores vinculados.</p>
                   ) : (

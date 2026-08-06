@@ -3,7 +3,7 @@
 // M2 · Comparación sectorial y territorio.
 
 import { useState } from "react";
-import { PageHeader, Card, CardHeader, DemoBanner } from "@/components/ui";
+import { PageHeader, Card, CardHeader } from "@/components/ui";
 import { ColombiaMap, CesarMap, PeerBars, PertinenceQuadrant } from "@/components/charts";
 import { MUNICIPALITIES, SUBREGIONS, BENCHMARK, QUADRANT } from "@/data/demo";
 
@@ -14,7 +14,6 @@ export default function BenchmarkPage() {
     <>
       <PageHeader kicker="M2 · Comparación" title="Posición sectorial y territorio"
         desc="Tres cortes: nacional, pares comparables y la cobertura municipal del Cesar. El benchmark responde la pregunta que sigue a todo diagnóstico: ¿esto es bueno o malo comparado con quién?" />
-      <DemoBanner />
 
       <div className="mb-5 grid gap-5 lg:grid-cols-2">
         <Card className="rise rise-1">
@@ -33,11 +32,11 @@ export default function BenchmarkPage() {
           sub="25 municipios · tamaño del punto proporcional a matrícula · filtra por subregión" />
         <div className="grid gap-6 px-5 py-5 lg:grid-cols-5">
           <div className="lg:col-span-1">
-            <div className="mono-label mb-2">Posición nacional</div>
+            <div className="label mb-2">Posición nacional</div>
             <ColombiaMap />
           </div>
           <div className="lg:col-span-2">
-            <div className="mono-label mb-2">Departamento del Cesar</div>
+            <div className="label mb-2">Departamento del Cesar</div>
             <CesarMap munis={[...MUNICIPALITIES]} highlight={sub} />
             <div className="mt-2 flex flex-wrap items-center gap-3.5 text-[11px] text-muted">
               <span className="flex items-center gap-1.5"><i className="h-3 w-3 rounded-full" style={{ background: "var(--cyan-deep)" }} /> Cobertura alta</span>
@@ -46,7 +45,7 @@ export default function BenchmarkPage() {
             </div>
           </div>
           <div className="lg:col-span-2">
-            <div className="mono-label mb-2.5">Lectura por subregión</div>
+            <div className="label mb-2.5">Lectura por subregión</div>
             <div className="space-y-2.5">
               {SUBREGIONS.map((s) => {
                 const munis = MUNICIPALITIES.filter((m) => m.subregion === s.name);

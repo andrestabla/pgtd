@@ -1,13 +1,14 @@
 "use client";
 
-// Shell de la aplicación: sidebar de navegación + topbar.
+// Shell v2: rail oscuro con indicador de gradiente, topbar con contexto
+// del módulo activo y píldora única de modo demo.
 
 import { type ReactNode, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Radar, Globe2, Network, Gauge, Map as MapIcon, ListChecks,
-  BarChart3, LayoutDashboard, LogOut, Menu, X, Share2,
+  BarChart3, LayoutDashboard, LogOut, Menu, X, Share2, FlaskConical,
 } from "lucide-react";
 import { AlgoritmoMark } from "@/components/logo";
 import { INSTITUTION } from "@/data/demo";
@@ -23,6 +24,13 @@ const NAV = [
   { href: "/panel/bi", label: "Inteligencia", icon: BarChart3, code: "M7" },
 ];
 
+const ROLE_LABEL: Record<string, string> = {
+  CONSULTOR: "Consultor Algoritmo T",
+  LIDER: "Líder institucional",
+  RESPONSABLE: "Responsable de línea",
+  DIRECTIVO: "Directivo",
+};
+
 export function AppShell({ children, user }: {
   children: ReactNode;
   user: { name: string; role: string };
@@ -31,12 +39,8 @@ export function AppShell({ children, user }: {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  const roleLabel: Record<string, string> = {
-    CONSULTOR: "Consultor Algoritmo T",
-    LIDER: "Líder institucional",
-    RESPONSABLE: "Responsable de línea",
-    DIRECTIVO: "Directivo",
-  };
+  const current = NAV.slice().reverse().find((n) =>
+    n.href === "/panel" ? pathname === "/panel" : pathname.startsWith(n.href));
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -45,22 +49,27 @@ export function AppShell({ children, user }: {
   };
 
   const nav = (
-    <nav className="flex flex-col gap-0.5 px-3">
+    <nav className="flex flex-col gap-1 px-3">
+      <div className="label mb-1 px-3 !text-white/30">Módulos</div>
       {NAV.map((item) => {
         const active = item.href === "/panel"
           ? pathname === "/panel"
           : pathname.startsWith(item.href);
         return (
           <Link key={item.href} href={item.href} onClick={() => setOpen(false)}
-            className={`group flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
+            className={`group relative flex items-center gap-3 rounded-xl px-3 py-[9px] text-[13px] font-medium transition-all duration-150 ${
               active
-                ? "bg-white/12 text-white"
-                : "text-white/55 hover:bg-white/7 hover:text-white/90"
+                ? "bg-white/[0.09] text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]"
+                : "text-white/50 hover:translate-x-[2px] hover:bg-white/[0.05] hover:text-white/85"
             }`}>
-            <item.icon size={16} strokeWidth={active ? 2.4 : 2} />
+            {active && (
+              <span className="spine absolute left-0 top-1/2 h-[58%] w-[3px] -translate-y-1/2 rounded-r-full" />
+            )}
+            <item.icon size={16} strokeWidth={active ? 2.4 : 1.9}
+              className={active ? "text-cyan-fill" : ""} />
             <span className="flex-1">{item.label}</span>
             {item.code && (
-              <span className={`font-mono text-[9px] tracking-wider ${active ? "text-cyan-fill" : "text-white/30"}`}>
+              <span className={`num text-[9px] tracking-wider ${active ? "text-cyan-fill/90" : "text-white/25"}`}>
                 {item.code}
               </span>
             )}
@@ -72,24 +81,31 @@ export function AppShell({ children, user }: {
 
   return (
     <div className="flex min-h-screen">
-      {/* sidebar escritorio */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[228px] flex-col lg:flex"
-        style={{ background: "linear-gradient(178deg, var(--navy-deep) 0%, var(--navy) 70%, #1c3a63 100%)" }}>
-        <div className="flex items-center gap-2.5 px-5 pb-5 pt-5">
-          <AlgoritmoMark size={26} />
+      {/* rail escritorio */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[232px] flex-col lg:flex"
+        style={{ background: "var(--grad-deep)" }}>
+        <div aria-hidden className="pointer-events-none absolute inset-0"
+          style={{ background: "radial-gradient(420px 220px at 100% 0%, rgb(79 208 236 / 0.09), transparent 60%)" }} />
+        <div className="relative flex items-center gap-2.5 px-5 pb-6 pt-5">
+          <AlgoritmoMark size={27} />
           <div className="leading-tight">
-            <div className="text-[13px] font-extrabold tracking-tight text-white">PGTD</div>
-            <div className="font-mono text-[8.5px] uppercase tracking-[0.14em] text-white/40">Algoritmo T</div>
+            <div className="text-[13.5px] font-extrabold tracking-tight text-white">PGTD</div>
+            <div className="text-[8.5px] font-semibold uppercase tracking-[0.16em] text-white/35">
+              Algoritmo T
+            </div>
           </div>
         </div>
-        {nav}
-        <div className="mt-auto px-5 pb-5">
-          <div className="mb-3 rounded-lg border border-white/10 bg-white/5 px-3.5 py-3">
-            <div className="text-[12px] font-bold text-white">{INSTITUTION.shortName}</div>
-            <div className="mt-0.5 text-[10.5px] leading-snug text-white/45">{INSTITUTION.name}</div>
+        <div className="relative">{nav}</div>
+        <div className="relative mt-auto px-4 pb-4">
+          <div className="mb-3 overflow-hidden rounded-xl bg-white/[0.05] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)]">
+            <div className="spine h-[2.5px]" />
+            <div className="px-4 py-3">
+              <div className="text-[12.5px] font-bold text-white">{INSTITUTION.shortName}</div>
+              <div className="mt-0.5 text-[10.5px] leading-snug text-white/40">{INSTITUTION.name}</div>
+            </div>
           </div>
           <button onClick={logout}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[12.5px] text-white/50 transition-colors hover:bg-white/7 hover:text-white">
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[12.5px] font-medium text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white">
             <LogOut size={14} /> Cerrar sesión
           </button>
         </div>
@@ -98,12 +114,14 @@ export function AppShell({ children, user }: {
       {/* drawer móvil */}
       {open && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-[250px] flex-col pt-5"
-            style={{ background: "var(--navy-deep)" }}>
-            <div className="mb-4 flex items-center justify-between px-5">
-              <div className="flex items-center gap-2"><AlgoritmoMark size={24} />
-                <span className="text-[13px] font-extrabold text-white">PGTD</span></div>
+          <div className="absolute inset-0 bg-navy-deep/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 flex w-[256px] flex-col pt-5"
+            style={{ background: "var(--grad-deep)" }}>
+            <div className="mb-5 flex items-center justify-between px-5">
+              <div className="flex items-center gap-2.5">
+                <AlgoritmoMark size={24} />
+                <span className="text-[13.5px] font-extrabold text-white">PGTD</span>
+              </div>
               <button onClick={() => setOpen(false)} className="text-white/60"><X size={18} /></button>
             </div>
             {nav}
@@ -112,29 +130,43 @@ export function AppShell({ children, user }: {
       )}
 
       {/* contenido */}
-      <div className="flex min-w-0 flex-1 flex-col lg:pl-[228px]">
-        <header className="sticky top-0 z-30 flex h-[52px] items-center gap-3 border-b border-line bg-surface/85 px-4 backdrop-blur-md sm:px-6">
+      <div className="flex min-w-0 flex-1 flex-col lg:pl-[232px]">
+        <header className="sticky top-0 z-30 flex h-[54px] items-center gap-3 border-b border-line/70 bg-white/70 px-4 backdrop-blur-xl sm:px-7">
           <button onClick={() => setOpen(true)} className="text-muted lg:hidden"><Menu size={19} /></button>
-          <div className="mono-label hidden sm:block">
-            Plataforma de Gestión de la Transformación Digital
+
+          <div className="flex items-baseline gap-2.5">
+            <span className="text-[13.5px] font-bold tracking-tight text-ink">
+              {current?.label ?? "Panel"}
+            </span>
+            {current?.code && (
+              <span className="num text-[10px] font-bold tracking-wider text-faint">{current.code}</span>
+            )}
           </div>
-          <div className="ml-auto flex items-center gap-3">
-            <button className="chip chip-cyan cursor-pointer" title="Generar enlace público de solo lectura">
-              <Share2 size={11} /> Vista pública
+
+          <span className="chip chip-gold ml-1 hidden sm:inline-flex" title="Datos ilustrativos. La primera medición real se produce en la Fase 0.">
+            <FlaskConical size={11} /> Datos demo
+          </span>
+
+          <div className="ml-auto flex items-center gap-2.5">
+            <button className="btn-ghost hidden sm:inline-flex" title="Generar enlace público de solo lectura">
+              <Share2 size={13} /> Vista pública
             </button>
-            <div className="flex items-center gap-2.5 border-l border-line pl-3">
-              <div className="grid h-7 w-7 place-items-center rounded-full bg-navy text-[11px] font-bold text-white">
+            <div className="flex items-center gap-2.5 pl-1">
+              <div className="grid h-8 w-8 place-items-center rounded-full text-[11px] font-bold text-white shadow-md"
+                style={{ background: "linear-gradient(135deg, var(--cyan-deep), var(--navy))" }}>
                 {user.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
               </div>
-              <div className="hidden leading-tight sm:block">
-                <div className="text-[12px] font-semibold text-ink">{user.name}</div>
-                <div className="text-[10px] text-faint">{roleLabel[user.role] ?? user.role}</div>
+              <div className="hidden leading-tight md:block">
+                <div className="text-[12px] font-bold text-ink">{user.name}</div>
+                <div className="text-[10px] text-faint">{ROLE_LABEL[user.role] ?? user.role}</div>
               </div>
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-7 sm:px-7">{children}</main>
-        <footer className="border-t border-line px-6 py-4 text-center font-mono text-[9.5px] uppercase tracking-[0.14em] text-faint">
+
+        <main className="mx-auto w-full max-w-[1220px] flex-1 px-4 py-8 sm:px-8">{children}</main>
+
+        <footer className="px-8 pb-6 pt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-faint/70">
           Algoritmo T S.A.S. · PGTD · Universidad Popular del Cesar
         </footer>
       </div>

@@ -1,86 +1,151 @@
 "use client";
 
-// Primitivas de interfaz de la PGTD.
+// Primitivas de interfaz v2 — superficies por sombra, números con count-up,
+// microcopy sobrio.
 
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight } from "lucide-react";
+
+/* ─── count-up para métricas ─── */
+
+export function useCountUp(target: number, decimals = 0, duration = 900) {
+  const [value, setValue] = useState(0);
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) { setValue(target); return; }
+    started.current = true;
+    if (typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setValue(target); return;
+    }
+    const t0 = performance.now();
+    let raf = 0;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - t0) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setValue(target * eased);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return value.toLocaleString("es-CO", {
+    minimumFractionDigits: decimals, maximumFractionDigits: decimals,
+  });
+}
+
+function CountUp({ value, decimals = 0, suffix = "" }:
+  { value: number; decimals?: number; suffix?: string }) {
+  const text = useCountUp(value, decimals);
+  return <>{text}{suffix}</>;
+}
+
+/* ─── cabecera de página ─── */
 
 export function PageHeader({ kicker, title, desc, actions }:
   { kicker: string; title: string; desc?: string; actions?: ReactNode }) {
   return (
-    <div className="rise mb-7 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <div className="kicker mb-1.5">{kicker}</div>
-        <h1 className="text-[26px] font-extrabold leading-tight tracking-tight text-ink">{title}</h1>
-        {desc && <p className="mt-1.5 max-w-2xl text-[13.5px] text-muted">{desc}</p>}
+    <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <div className="max-w-2xl">
+        <div className="kicker mb-2">{kicker}</div>
+        <h1 className="text-[27px] font-extrabold leading-[1.15] tracking-[-0.028em] text-ink">
+          {title}
+        </h1>
+        {desc && <p className="mt-2 text-[13.5px] leading-relaxed text-muted">{desc}</p>}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </div>
   );
 }
 
+/* ─── superficies ─── */
+
 export function Card({ children, className = "", hover = false }:
   { children: ReactNode; className?: string; hover?: boolean }) {
   return (
-    <div className={`card ${hover ? "card-hover" : ""} ${className}`}>{children}</div>
+    <div className={`panel ${hover ? "panel-lift" : ""} ${className}`}>{children}</div>
   );
 }
 
 export function CardHeader({ title, sub, right }:
   { title: string; sub?: string; right?: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-3.5">
+    <div className="p-head pb-4">
       <div>
-        <div className="text-[14px] font-bold text-ink">{title}</div>
-        {sub && <div className="mt-0.5 text-[12px] text-muted">{sub}</div>}
+        <div className="p-title">{title}</div>
+        {sub && <div className="p-sub">{sub}</div>}
       </div>
       {right}
     </div>
   );
 }
 
-export function StatCard({ label, value, unit, delta, good, foot }: {
-  label: string; value: string; unit?: string;
-  delta?: number; good?: boolean; foot?: string;
+/* ─── métrica ─── */
+
+export function StatCard({ label, value, decimals = 0, prefix = "", unit, delta, good, foot, accent }: {
+  label: string; value: number; decimals?: number; prefix?: string; unit?: string;
+  delta?: number; good?: boolean; foot?: string; accent?: string;
 }) {
-  const DeltaIcon = delta === undefined ? Minus : delta >= 0 ? ArrowUpRight : ArrowDownRight;
-  const deltaColor = delta === undefined ? "var(--faint)" : good ? "var(--ok)" : "var(--bad)";
+  const DeltaIcon = delta !== undefined && delta >= 0 ? ArrowUpRight : ArrowDownRight;
   return (
-    <div className="card px-5 py-4">
-      <div className="text-[12px] leading-snug text-muted">{label}</div>
-      <div className="mt-1.5 flex items-baseline gap-2">
-        <span className="font-mono text-[26px] font-bold tracking-tight text-ink">{value}</span>
-        {unit && <span className="text-[12px] text-faint">{unit}</span>}
+    <div className="panel relative overflow-hidden px-5 pb-4 pt-4">
+      <div className="absolute inset-x-0 top-0 h-[3px] opacity-90"
+        style={{ background: accent ?? "var(--grad-brand)" }} />
+      <div className="text-[11.5px] font-medium leading-snug text-muted">{label}</div>
+      <div className="mt-2 flex items-baseline gap-1.5">
+        <span className="num text-[30px] font-extrabold text-ink">
+          {prefix}<CountUp value={value} decimals={decimals} />
+        </span>
+        {unit && <span className="text-[12px] font-medium text-faint">{unit}</span>}
         {delta !== undefined && (
-          <span className="ml-auto inline-flex items-center gap-0.5 font-mono text-[12px] font-semibold"
-            style={{ color: deltaColor }}>
-            <DeltaIcon size={13} strokeWidth={2.5} />
+          <span className={`num ml-auto inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11.5px] font-bold ${
+            good ? "chip-ok" : "chip-bad"} chip`}>
+            <DeltaIcon size={12} strokeWidth={2.6} />
             {Math.abs(delta).toLocaleString("es-CO", { maximumFractionDigits: 1 })}
           </span>
         )}
       </div>
-      {foot && <div className="mono-label mt-2">{foot}</div>}
+      {foot && <div className="mt-2 text-[11px] text-faint">{foot}</div>}
     </div>
   );
 }
 
+/* ─── badges de estado ─── */
+
+const LEVEL_META = [
+  null,
+  { name: "Inicial", color: "var(--n1)" },
+  { name: "En desarrollo", color: "var(--n2)" },
+  { name: "Definido", color: "var(--n3)" },
+  { name: "Gestionado", color: "var(--n4)" },
+  { name: "Optimizado", color: "var(--n5)" },
+] as const;
+
 export function LevelBadge({ level }: { level: number }) {
-  const names = ["", "Inicial", "En desarrollo", "Definido", "Gestionado", "Optimizado"];
-  const colors = ["", "var(--n1)", "var(--n2)", "var(--n3)", "var(--n4)", "var(--n5)"];
   const idx = Math.max(1, Math.min(5, Math.round(level)));
+  const meta = LEVEL_META[idx]!;
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full py-0.5 pl-1.5 pr-2.5 text-[11px] font-semibold text-white"
-      style={{ background: colors[idx] }}>
-      <span className="grid h-4 w-4 place-items-center rounded-full bg-white/25 font-mono text-[10px]">{idx}</span>
-      {names[idx]}
+    <span className="inline-flex items-center gap-2 rounded-full py-1 pl-1.5 pr-3 text-[11.5px] font-bold text-white shadow-sm"
+      style={{ background: meta.color }}>
+      <span className="num grid h-[18px] w-[18px] place-items-center rounded-full bg-white/25 text-[10.5px]">
+        {idx}
+      </span>
+      {meta.name}
     </span>
   );
 }
 
-export function StateDot({ state }: { state: "VERDE" | "AMBAR" | "ROJO" }) {
+export function StateDot({ state, size = 9 }: { state: "VERDE" | "AMBAR" | "ROJO"; size?: number }) {
   const c = state === "VERDE" ? "var(--ok)" : state === "AMBAR" ? "var(--warn)" : "var(--bad)";
-  return <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: c }} aria-label={state} />;
+  return (
+    <span className="inline-block rounded-full"
+      style={{
+        width: size, height: size, background: c,
+        boxShadow: `0 0 0 3px color-mix(in srgb, ${c} 16%, transparent)`,
+      }}
+      aria-label={state} />
+  );
 }
 
 export function StatusChip({ status }: { status: string }) {
@@ -97,42 +162,41 @@ export function StatusChip({ status }: { status: string }) {
 
 export function EmptyNote({ children }: { children: ReactNode }) {
   return (
-    <p className="rounded-lg border border-dashed border-line-strong bg-surface px-4 py-3 text-[12.5px] italic text-faint">
+    <p className="rounded-xl bg-surface-2 px-4 py-3 text-[12.5px] leading-relaxed text-faint">
       {children}
     </p>
   );
 }
 
+/* El aviso de datos demo vive ahora en la topbar (una sola vez).
+   Se conserva el export para compatibilidad. */
 export function DemoBanner() {
-  return (
-    <div className="mb-5 flex items-center gap-2.5 rounded-lg border px-4 py-2.5 text-[12.5px]"
-      style={{ borderColor: "color-mix(in srgb, var(--gold) 35%, white)", background: "var(--gold-wash)", color: "var(--gold)" }}>
-      <span className="chip chip-gold shrink-0">Demo</span>
-      Datos ilustrativos. La primera medición real de la UPC se produce en la Fase 0 de la consultoría.
-    </div>
-  );
+  return null;
 }
+
+/* ─── tarjeta de módulo ─── */
 
 export function ModuleCard({ href, code, title, desc, tags }: {
   href: string; code: string; title: string; desc: string; tags?: string[];
 }) {
   return (
-    <Link href={href} className="card card-hover group relative block overflow-hidden p-5">
-      <div className="absolute right-4 top-3 font-mono text-[34px] font-extrabold"
-        style={{ color: "var(--surface-2)" }}>{code}</div>
-      <div className="relative">
-        <h3 className="pr-10 text-[15.5px] font-bold tracking-tight text-ink">{title}</h3>
-        <p className="mt-1 min-h-[3.6em] text-[12.5px] leading-relaxed text-muted">{desc}</p>
-        {tags && (
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {tags.map((t) => <span key={t} className="chip">{t}</span>)}
-          </div>
-        )}
-        <div className="mt-3.5 inline-flex items-center gap-1 text-[13px] font-bold text-cyan-deep">
-          Abrir
-          <ArrowUpRight size={14} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-        </div>
+    <Link href={href} className="panel panel-lift group relative block overflow-hidden p-5">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-[15px] font-bold tracking-tight text-ink transition-colors group-hover:text-navy">
+          {title}
+        </h3>
+        <span className="num shrink-0 rounded-lg bg-surface-2 px-2 py-0.5 text-[10.5px] font-bold text-faint transition-colors group-hover:bg-cyan-wash group-hover:text-cyan-deep">
+          {code}
+        </span>
       </div>
+      <p className="mt-1.5 min-h-[3.4em] text-[12.5px] leading-relaxed text-muted">{desc}</p>
+      <div className="mt-3 flex items-center justify-between">
+        <div className="flex flex-wrap gap-1.5">
+          {tags?.map((t) => <span key={t} className="chip">{t}</span>)}
+        </div>
+        <ArrowUpRight size={15} className="shrink-0 text-faint transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-cyan-deep" />
+      </div>
+      <div className="spine absolute inset-x-0 bottom-0 h-[2.5px] origin-left scale-x-0 transition-transform duration-300 group-hover:scale-x-100" />
     </Link>
   );
 }

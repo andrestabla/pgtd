@@ -3,7 +3,7 @@
 // M1 · Medición de madurez: radar + heatmap + detalle de celda con evidencia.
 
 import { useState } from "react";
-import { PageHeader, Card, CardHeader, DemoBanner, LevelBadge, EmptyNote } from "@/components/ui";
+import { PageHeader, Card, CardHeader, LevelBadge, EmptyNote } from "@/components/ui";
 import { MaturityRadar, MaturityHeatmap } from "@/components/charts";
 import { LINES, DIMENSIONS, SCORES, LEVELS, EVIDENCES } from "@/data/demo";
 import { FileText, X } from "lucide-react";
@@ -22,7 +22,6 @@ export default function MadurezPage() {
     <>
       <PageHeader kicker="M1 · Medición de madurez" title="Madurez por línea y dimensión"
         desc="Cada celda del mapa de calor abre su detalle: puntaje, meta, responsable y evidencia verificable. La medición se repite con el mismo instrumento para construir la serie." />
-      <DemoBanner />
 
       <div className="grid gap-5 lg:grid-cols-5">
         <Card className="rise rise-1 lg:col-span-2">
@@ -61,16 +60,16 @@ export default function MadurezPage() {
           />
           <div className="grid gap-6 px-5 py-5 md:grid-cols-3">
             <div>
-              <div className="mono-label mb-2">Nivel actual</div>
+              <div className="label mb-2">Nivel actual</div>
               <LevelBadge level={score.value} />
-              <div className="mono-label mb-2 mt-4">Meta a 24 meses</div>
+              <div className="label mb-2 mt-4">Meta a 24 meses</div>
               <LevelBadge level={score.target} />
               <p className="mt-4 text-[12.5px] leading-relaxed text-muted">
                 {LEVELS[score.value - 1].desc}
               </p>
             </div>
             <div className="md:col-span-2">
-              <div className="mono-label mb-2.5">Evidencia asociada</div>
+              <div className="label mb-2.5">Evidencia asociada</div>
               {evidences.length === 0 ? (
                 <EmptyNote>
                   Sin evidencia cargada para esta celda en el modo demo. En operación, cada

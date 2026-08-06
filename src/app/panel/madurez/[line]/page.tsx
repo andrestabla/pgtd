@@ -5,7 +5,7 @@
 import { use } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PageHeader, Card, CardHeader, DemoBanner, LevelBadge, StatusChip } from "@/components/ui";
+import { PageHeader, Card, CardHeader, LevelBadge, StatusChip } from "@/components/ui";
 import { LINES, DIMENSIONS, SCORES, EVIDENCES, INITIATIVES, KPIS } from "@/data/demo";
 import { ArrowLeft, FileText } from "lucide-react";
 
@@ -28,7 +28,6 @@ export default function LineDetail({ params }: PageProps<"/panel/madurez/[line]"
       </Link>
       <PageHeader kicker={`Línea ${meta.code}`} title={meta.name}
         desc="Detalle de la línea: nivel por dimensión, evidencia que soporta la calificación e iniciativas que deberían moverla." />
-      <DemoBanner />
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card className="rise rise-1">

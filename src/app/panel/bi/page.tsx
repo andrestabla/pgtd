@@ -2,7 +2,7 @@
 
 // M7 · Inteligencia de negocio: puerta a los observatorios de Algoritmo T.
 
-import { PageHeader, Card, DemoBanner } from "@/components/ui";
+import { PageHeader, Card } from "@/components/ui";
 import { ExternalLink, Database, Briefcase, Map as MapIcon, FileOutput } from "lucide-react";
 
 const OBSERVATORIES = [
@@ -33,7 +33,6 @@ export default function BiPage() {
     <>
       <PageHeader kicker="M7 · Inteligencia" title="Observatorios de Algoritmo T"
         desc="El componente comparativo de la plataforma se apoya en los observatorios ya en operación: llegan con datos desde el primer día, sin que la Universidad tenga que aportarlos." />
-      <DemoBanner />
 
       <div className="grid gap-4 sm:grid-cols-2">
         {OBSERVATORIES.map((o, i) => (

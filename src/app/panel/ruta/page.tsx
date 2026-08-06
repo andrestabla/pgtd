@@ -3,7 +3,7 @@
 // M5 · Mapa de ruta: Gantt por trimestres + matriz de priorización.
 
 import { useState } from "react";
-import { PageHeader, Card, CardHeader, DemoBanner, StatusChip } from "@/components/ui";
+import { PageHeader, Card, CardHeader, StatusChip } from "@/components/ui";
 import { GanttChart, PriorityMatrix } from "@/components/charts";
 import { INITIATIVES, LINES, fmtCOP } from "@/data/demo";
 
@@ -18,7 +18,6 @@ export default function RutaPage() {
     <>
       <PageHeader kicker="M5 · Mapa de ruta" title="Roadmap 2026–2028"
         desc="La ruta con pertinencia contextual: cada iniciativa declara horizonte, responsable, presupuesto, capacidad que fortalece e indicador que debe mover." />
-      <DemoBanner />
 
       <div className="mb-5 grid gap-5 lg:grid-cols-2">
         <Card className="rise rise-1">
@@ -55,26 +54,26 @@ export default function RutaPage() {
           <CardHeader title={ini.name} sub="Ficha de la iniciativa" right={<StatusChip status={ini.status} />} />
           <div className="grid gap-x-8 gap-y-4 px-5 py-5 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <div className="mono-label mb-1">Línea</div>
+              <div className="label mb-1">Línea</div>
               <div className="text-[13px] font-semibold text-ink">
                 {LINES.find((l) => l.n === ini.line)?.code}{" "}
                 {LINES.find((l) => l.n === ini.line)?.name}
               </div>
             </div>
             <div>
-              <div className="mono-label mb-1">Responsable</div>
+              <div className="label mb-1">Responsable</div>
               <div className="text-[13px] font-semibold text-ink">{ini.owner}</div>
             </div>
             <div>
-              <div className="mono-label mb-1">Ventana</div>
+              <div className="label mb-1">Ventana</div>
               <div className="font-mono text-[12.5px] text-ink">{ini.start} → {ini.end}</div>
             </div>
             <div>
-              <div className="mono-label mb-1">Presupuesto</div>
+              <div className="label mb-1">Presupuesto</div>
               <div className="font-mono text-[12.5px] text-ink">{fmtCOP(ini.budgetPlanned)}</div>
             </div>
             <div className="sm:col-span-2">
-              <div className="mono-label mb-1">Prioridad</div>
+              <div className="label mb-1">Prioridad</div>
               <div className="text-[12.5px] text-muted">
                 Impacto <b className="text-ink">{ini.impact}/5</b> · Factibilidad{" "}
                 <b className="text-ink">{ini.feasibility}/5</b> ·{" "}
@@ -83,7 +82,7 @@ export default function RutaPage() {
               </div>
             </div>
             <div className="sm:col-span-2">
-              <div className="mono-label mb-1">Avance</div>
+              <div className="label mb-1">Avance</div>
               <div className="flex items-center gap-3">
                 <div className="h-[8px] flex-1 overflow-hidden rounded-full bg-surface-2">
                   <div className="h-full rounded-full bg-cyan" style={{ width: `${ini.progress}%` }} />
