@@ -1,0 +1,85 @@
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/session";
+import { buildAlerts } from "@/lib/logic";
+import { getComments, getTask, getNotifRead, markNotifRead, hydrateFromDb } from "@/server/store";
+import { INITIATIVES_FULL } from "@/data/cmi";
+
+// GET /api/td/notifications — el buzón del usuario: alertas del motor
+// dirigidas a su rol/línea + comentarios de su ámbito (las menciones llegan
+// siempre). POST marca leídas.
+
+export type Notification = {
+  id: string;
+  kind: string;
+  severity: 1 | 2 | 3;
+  title: string;
+  detail: string;
+  href: string;
+  read: boolean;
+  mention?: boolean;
+};
+
+export async function GET() {
+  const user = await getSession();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  await hydrateFromDb();
+
+  const read = getNotifRead(user.email);
+  const items: Notification[] = [];
+
+  // 1 · alertas del motor, dirigidas por rol y línea
+  for (const a of buildAlerts()) {
+    const mine =
+      user.role === "CONSULTOR" || user.role === "LIDER" ? true
+      : user.role === "RESPONSABLE" ? a.line === user.line
+      : a.severity <= 2;                       // directivo: lo estratégico
+    if (!mine) continue;
+    items.push({
+      id: a.id, kind: a.kind, severity: a.severity,
+      title: a.title, detail: a.detail, href: a.href,
+      read: read.has(a.id),
+    });
+  }
+
+  // 2 · comentarios del ámbito (excluye los propios); menciones siempre
+  const firstName = user.name.split(" ")[0].toLowerCase();
+  for (const c of getComments()) {
+    if (c.author === user.name) continue;
+    const t = getTask(c.taskId);
+    const line = t ? INITIATIVES_FULL.find((i) => i.id === t.iniId)?.line : undefined;
+    const mention = c.text.includes("@") && c.text.toLowerCase().includes(firstName);
+    const inScope =
+      user.role === "CONSULTOR" || user.role === "LIDER" ? true
+      : user.role === "RESPONSABLE" ? line === user.line
+      : false;
+    if (!inScope && !mention) continue;
+    const id = `comment-${c.id}`;
+    items.push({
+      id, kind: mention ? "MENCION" : "COMENTARIO",
+      severity: mention ? 2 : 3,
+      title: `${c.author} comentó en ${c.taskId}`,
+      detail: c.text.length > 140 ? c.text.slice(0, 139) + "…" : c.text,
+      href: "/panel/proyectos",
+      read: read.has(id),
+      mention,
+    });
+  }
+
+  items.sort((a, b) => Number(a.read) - Number(b.read) || a.severity - b.severity);
+  return NextResponse.json({
+    items,
+    unread: items.filter((i) => !i.read).length,
+  });
+}
+
+export async function POST(req: Request) {
+  const user = await getSession();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const body = await req.json().catch(() => null);
+  if (!Array.isArray(body?.ids)) {
+    return NextResponse.json({ error: "Cuerpo inválido: ids[]" }, { status: 400 });
+  }
+  markNotifRead(user.email, body.ids);
+  return NextResponse.json({ ok: true });
+}

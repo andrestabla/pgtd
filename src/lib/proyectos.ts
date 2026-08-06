@@ -26,6 +26,7 @@ export type TaskAlert = {
   title: string;
   detail: string;
   ownerName: string;
+  line: number;               // línea de la iniciativa (para dirigir notificaciones)
 };
 
 const daysLate = (t: Task) =>
@@ -38,6 +39,7 @@ export function taskAlerts(): TaskAlert[] {
   for (const t of TASKS()) {
     const ini = INITIATIVES_FULL.find((i) => i.id === t.iniId)!;
     const who = person(t.assigneeId).name;
+    const line = ini.line;
 
     if (isOverdue(t)) {
       const late = daysLate(t);
@@ -46,6 +48,7 @@ export function taskAlerts(): TaskAlert[] {
         kind: "TAREA_VENCIDA",
         severity: late > 21 ? 1 : 2,
         taskId: t.id,
+        line,
         title: t.title,
         detail: `Vencida hace ${late} día${late === 1 ? "" : "s"} en «${ini.name}».${t.note ? " " + t.note : ""}`,
         ownerName: who,
@@ -58,6 +61,7 @@ export function taskAlerts(): TaskAlert[] {
         kind: "TAREA_BLOQUEADA",
         severity: 2,
         taskId: t.id,
+        line,
         title: t.title,
         detail: `Bloqueada en «${ini.name}».${t.note ? " " + t.note : ""}`,
         ownerName: who,
@@ -71,6 +75,7 @@ export function taskAlerts(): TaskAlert[] {
         kind: "ENTREGABLE_SIN_EVIDENCIA",
         severity: 3,
         taskId: t.id,
+        line,
         title: t.title,
         detail: `Cerrada sin evidencia adjunta en «${ini.name}»: toda actividad exige soporte verificable al cierre.`,
         ownerName: who,
@@ -86,6 +91,7 @@ export function taskAlerts(): TaskAlert[] {
           kind: "DEPENDENCIA_VENCIDA",
           severity: 3,
           taskId: t.id,
+          line,
           title: t.title,
           detail: `Su prerrequisito «${lateDep.title}» está vencido: el cronograma de «${ini.name}» se corre en cadena.`,
           ownerName: who,

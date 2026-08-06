@@ -300,6 +300,7 @@ export type Alert = {
   detail: string;
   href: string;
   owner?: string;
+  line?: number;                    // línea misional (para dirigir notificaciones)
 };
 
 export function buildAlerts(): Alert[] {
@@ -315,6 +316,7 @@ export function buildAlerts(): Alert[] {
       detail: ta.detail,
       href: "/panel/proyectos",
       owner: ta.ownerName,
+      line: ta.line,
     });
   }
 
@@ -330,8 +332,9 @@ export function buildAlerts(): Alert[] {
           kind: "FACTOR_RACHA_ROJA", severity: 1,
           title: f.name,
           detail: `${len} revisiones seguidas en rojo en «${i.name}». ${f.note ?? ""}`.trim(),
-          href: "/panel/iniciativas",
+          href: `/panel/iniciativas/${i.id}`,
           owner: responsible(i.ownerId).dependencia,
+          line: i.line,
         });
       }
     }
@@ -348,6 +351,7 @@ export function buildAlerts(): Alert[] {
         detail: `Último dato (${h.latestPeriod}): ${h.latest} ${k.unit}, en dirección contraria a la meta de ${k.target}.`,
         href: "/panel/kpi",
         owner: responsible(k.ownerId).dependencia,
+        line: k.line,
       });
     }
     if (h.isStale) {
@@ -358,6 +362,7 @@ export function buildAlerts(): Alert[] {
         detail: `Periodicidad ${k.frequency.toLowerCase()}; el último dato es de ${h.latestPeriod} (${h.staleBy} meses sobre lo tolerado).`,
         href: "/panel/kpi",
         owner: responsible(k.ownerId).dependencia,
+        line: k.line,
       });
     }
     if (h.improving && !h.projection.willReachTarget && h.semaphore !== "OK") {
@@ -368,6 +373,7 @@ export function buildAlerts(): Alert[] {
         detail: `Mejora, pero al ritmo actual llegaría a ${h.projection.projectedAtTarget} ${k.unit} en dic-2028, frente a una meta de ${k.target}.`,
         href: "/panel/kpi",
         owner: responsible(k.ownerId).dependencia,
+        line: k.line,
       });
     }
   }
@@ -382,8 +388,9 @@ export function buildAlerts(): Alert[] {
           kind: "DESALINEACION_PRESUPUESTAL", severity: 2,
           title: i.name,
           detail: d.text + ".",
-          href: "/panel/iniciativas",
+          href: `/panel/iniciativas/${i.id}`,
           owner: responsible(i.ownerId).dependencia,
+          line: i.line,
         });
       }
       if (d.text.includes("trimestre vencido")) {
@@ -392,8 +399,9 @@ export function buildAlerts(): Alert[] {
           kind: "ACCION_VENCIDA", severity: 2,
           title: i.name,
           detail: d.text + ".",
-          href: "/panel/iniciativas",
+          href: `/panel/iniciativas/${i.id}`,
           owner: responsible(i.ownerId).dependencia,
+          line: i.line,
         });
       }
     }
@@ -409,7 +417,8 @@ export function buildAlerts(): Alert[] {
       kind: "CELDA_SIN_EVIDENCIA", severity: 3,
       title: `${line.code} · ${dim.name} sin evidencia`,
       detail: "La calificación de esta celda no tiene soporte documental cargado.",
-      href: "/panel/madurez",
+      href: "/panel/madurez/variables",
+      line: c.line,
     });
   }
   if (roll.unverifiedEvidences > 0) {

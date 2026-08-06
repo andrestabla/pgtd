@@ -4,13 +4,13 @@
 // contexto del módulo activo y píldora única de modo demo. El estado de
 // colapso persiste en localStorage (pgtd-rail).
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Radar, Globe2, Network, Gauge, Map as MapIcon, ListChecks,
   BarChart3, LayoutDashboard, LogOut, Menu, X, Share2, FlaskConical, KanbanSquare, BookOpen,
-  PanelLeftClose, PanelLeftOpen,
+  PanelLeftClose, PanelLeftOpen, Bell, ShieldAlert, AlertTriangle, Info, AtSign, CheckCheck,
 } from "lucide-react";
 import { AlgoritmoMark } from "@/components/logo";
 import { INSTITUTION } from "@/data/demo";
@@ -38,6 +38,122 @@ function PublicLinkButton() {
       <Share2 size={13} />
       {state === "copied" ? "Enlace copiado" : "Vista pública"}
     </button>
+  );
+}
+
+/* ─── centro de notificaciones ─── */
+
+type Notif = {
+  id: string; kind: string; severity: 1 | 2 | 3;
+  title: string; detail: string; href: string; read: boolean; mention?: boolean;
+};
+
+const NOTIF_ICON = (n: Notif) => {
+  if (n.mention) return { Icon: AtSign, color: "var(--cyan-deep)" };
+  if (n.severity === 1) return { Icon: ShieldAlert, color: "var(--bad)" };
+  if (n.severity === 2) return { Icon: AlertTriangle, color: "var(--warn)" };
+  return { Icon: Info, color: "var(--muted)" };
+};
+
+function NotificationsBell() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<Notif[]>([]);
+  const [unread, setUnread] = useState(0);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const refetch = useCallback(async () => {
+    try {
+      const res = await fetch("/api/td/notifications");
+      if (!res.ok) return;
+      const j = await res.json();
+      setItems(j.items);
+      setUnread(j.unread);
+    } catch { /* sin red */ }
+  }, []);
+
+  useEffect(() => {
+    refetch();
+    const t = setInterval(refetch, 90_000);
+    return () => clearInterval(t);
+  }, [refetch]);
+
+  // clic fuera cierra
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const markRead = async (ids: string[]) => {
+    await fetch("/api/td/notifications", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    await refetch();
+  };
+
+  return (
+    <div className="relative" ref={panelRef}>
+      <button onClick={() => { setOpen((o) => !o); if (!open) refetch(); }}
+        className="relative grid h-8 w-8 place-items-center rounded-full text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+        title="Notificaciones">
+        <Bell size={16} />
+        {unread > 0 && (
+          <span className="num absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[8.5px] font-extrabold text-white"
+            style={{ background: "var(--bad)" }}>
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="panel absolute right-0 top-[calc(100%+8px)] z-50 w-[min(400px,90vw)] overflow-hidden"
+          style={{ boxShadow: "var(--e3)" }}>
+          <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+            <span className="text-[12.5px] font-extrabold text-ink">
+              Notificaciones {unread > 0 && <span className="num text-cyan-deep">· {unread} sin leer</span>}
+            </span>
+            {unread > 0 && (
+              <button onClick={() => markRead(items.filter((i) => !i.read).map((i) => i.id))}
+                className="flex items-center gap-1 text-[10.5px] font-semibold text-muted hover:text-cyan-deep">
+                <CheckCheck size={11} /> Marcar todas
+              </button>
+            )}
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto">
+            {items.length === 0 && (
+              <p className="px-4 py-6 text-center text-[12px] italic text-faint">
+                Sin notificaciones para tu rol.
+              </p>
+            )}
+            {items.slice(0, 40).map((n) => {
+              const { Icon, color } = NOTIF_ICON(n);
+              return (
+                <button key={n.id}
+                  onClick={async () => {
+                    setOpen(false);
+                    if (!n.read) markRead([n.id]);
+                    router.push(n.href);
+                  }}
+                  className={`flex w-full items-start gap-2.5 border-b border-line px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-surface-2 ${
+                    n.read ? "opacity-55" : ""}`}>
+                  <Icon size={14} className="mt-0.5 shrink-0" style={{ color }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[12px] font-bold text-ink">{n.title}</span>
+                    <span className="block text-[10.5px] leading-snug text-muted">{n.detail}</span>
+                  </span>
+                  {!n.read && <i className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: "var(--cyan)" }} />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -210,6 +326,7 @@ export function AppShell({ children, user }: {
           </span>
 
           <div className="ml-auto flex items-center gap-2.5">
+            <NotificationsBell />
             <PublicLinkButton />
             <div className="flex items-center gap-2.5 pl-1">
               <div className="grid h-8 w-8 place-items-center rounded-full text-[11px] font-bold text-white shadow-md"

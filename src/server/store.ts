@@ -951,6 +951,23 @@ export const effectiveAssessments = () =>
       ? { id: a.id, label: a.label, period: g.__pgtdPublished!.period, status: "PUBLICADA" as const, note: g.__pgtdPublished!.note }
       : { id: a.id, label: a.label, period: a.period, status: a.status, note: a.note });
 
+/* ═══ Notificaciones: estado de lectura por usuario ═══ */
+
+const notifRead = () => {
+  const gn = g as unknown as { __pgtdNotifRead?: Map<string, Set<string>> };
+  if (!gn.__pgtdNotifRead) gn.__pgtdNotifRead = new Map();
+  return gn.__pgtdNotifRead;
+};
+
+export const getNotifRead = (email: string): Set<string> =>
+  notifRead().get(email) ?? new Set();
+
+export function markNotifRead(email: string, ids: string[]) {
+  const set = notifRead().get(email) ?? new Set<string>();
+  for (const id of ids) set.add(id);
+  notifRead().set(email, set);
+}
+
 /* ═══ Utilidad para la demo ═══ */
 
 export function resetStore() {
@@ -965,6 +982,7 @@ export function resetStore() {
   g.__pgtdKpiReports = new Map();
   g.__pgtdIniOverrides = new Map();
   (g as unknown as { __pgtdArchived?: Task[] }).__pgtdArchived = [];
+  (g as unknown as { __pgtdNotifRead?: Map<string, Set<string>> }).__pgtdNotifRead = new Map();
 }
 
 export { DEMO_TODAY, responsible };
