@@ -7,9 +7,10 @@ import Link from "next/link";
 import { PageHeader, Card, CardHeader, StatCard, ModuleCard, StateDot } from "@/components/ui";
 import { MaturityRadar, ScoreGauge } from "@/components/charts";
 import {
-  LINES, lineScore, institutionScore, PREV_SCORES, INITIATIVES, KPIS, fmtCOP,
+  LINES, PREV_SCORES, INITIATIVES, KPIS, fmtCOP,
 } from "@/data/demo";
 import { buildAlerts, executiveSummary } from "@/lib/logic";
+import { useMaturity } from "@/lib/use-maturity";
 import { ArrowRight, ShieldAlert, AlertTriangle, Info } from "lucide-react";
 
 const SEV_META = {
@@ -19,8 +20,12 @@ const SEV_META = {
 } as const;
 
 export default function Panel() {
-  const score = institutionScore();
-  const prev = Object.values(PREV_SCORES).reduce((a, b) => a + b, 0) / 4;
+  // medición vigente efectiva (si A3 se publicó desde la plataforma, manda A3)
+  const { data: matData, scores: effScores, lineScoreOf, prevLineScoreOf, institution } = useMaturity();
+  const score = institution;
+  const prev = matData?.previous
+    ? [1, 2, 3, 4].reduce((a, n) => a + (prevLineScoreOf(n) ?? 0), 0) / 4
+    : Object.values(PREV_SCORES).reduce((a, b) => a + b, 0) / 4;
   const alerts = buildAlerts();
   const summary = executiveSummary();
   const budget = INITIATIVES.reduce(
@@ -37,7 +42,7 @@ export default function Panel() {
       <PageHeader
         kicker="Universidad Popular del Cesar"
         title="Estado de la transformación digital"
-        desc={`Medición vigente: ${summary.maturity.assessment.label} (${summary.maturity.assessment.period}) · publicada. Serie institucional: ${summary.maturity.history.map((h) => h.institution.toFixed(2).replace(".", ",")).join(" → ")}.`}
+        desc={`Medición vigente: ${matData?.current.label ?? summary.maturity.assessment.label} (${matData?.current.period ?? summary.maturity.assessment.period}) · publicada. Serie institucional: ${summary.maturity.history.map((h) => h.institution.toFixed(2).replace(".", ",")).join(" → ")}.`}
       />
 
       {/* ── héroe: gauge + avance por línea ── */}
@@ -57,10 +62,10 @@ export default function Panel() {
           <div className="space-y-4">
             <div className="label">Avance por línea</div>
             {LINES.map((l) => {
-              const now = lineScore(l.n);
-              const before = PREV_SCORES[l.n];
+              const now = lineScoreOf(l.n);
+              const before = prevLineScoreOf(l.n) ?? PREV_SCORES[l.n];
               return (
-                <Link key={l.n} href={`/panel/madurez/${l.n}`} className="group block">
+                <Link key={l.n} href="/panel/madurez/resumen" className="group block">
                   <div className="mb-1.5 flex items-baseline justify-between">
                     <span className="text-[13px] font-bold text-ink transition-colors group-hover:text-cyan-deep">
                       {l.code} <span className="font-semibold text-ink-soft">{l.name}</span>
@@ -94,7 +99,7 @@ export default function Panel() {
           </div>
 
           <div className="hidden lg:block">
-            <MaturityRadar size={320} />
+            <MaturityRadar size={320} scores={effScores} />
           </div>
         </div>
       </div>

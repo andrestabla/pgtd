@@ -10,10 +10,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { TASKS as TASKS_SEED, PEOPLE, type Task, type TaskStatus, DEMO_TODAY } from "@/data/proyectos";
-import { EVIDENCE_CATALOG, responsible } from "@/data/cmi";
+import {
+  EVIDENCE_CATALOG, responsible, INITIATIVES_FULL, SCORES_HISTORY,
+  currentAssessment as staticCurrent, previousAssessment as staticPrevious,
+  type AssessmentRecord, type CellScore,
+} from "@/data/cmi";
+import { VARIABLES } from "@/data/instrument";
 import type { SessionUser } from "@/lib/session";
 import { can } from "@/lib/permissions";
-import { INITIATIVES_FULL } from "@/data/cmi";
 
 /* ═══ Estado ═══ */
 
@@ -52,6 +56,18 @@ export type UploadedEvidence = {
   status: EvidenceStatus;
 };
 
+/** Captura de una variable durante la medición A3 (en curso). */
+export type VariableCapture = {
+  perception?: number;          // 1–5 · autodiagnóstico consolidado (responsable o consultor)
+  d?: number;                   // 0–4 · documentación (solo consultor)
+  i?: number;                   // 0–4 · implementación (solo consultor)
+  k?: number;                   // 0–4 · indicadores (solo consultor)
+  level?: number;               // 1–5 · nivel calificado contra la rúbrica (solo consultor)
+  note?: string;                // observación de la sesión de calificación
+  by: string;
+  at: string;                   // ISO
+};
+
 const g = globalThis as unknown as {
   __pgtdTasks?: Task[];
   __pgtdEvidence?: Map<string, EvidenceStatus>;
@@ -59,6 +75,8 @@ const g = globalThis as unknown as {
   __pgtdComments?: TaskComment[];
   __pgtdUploads?: UploadedEvidence[];
   __pgtdBaseline?: Map<string, { start: string; due: string }>;
+  __pgtdCapture?: Map<string, VariableCapture>;
+  __pgtdPublished?: AssessmentRecord | null;
   __pgtdHydrated?: boolean;
 };
 
@@ -76,12 +94,16 @@ if (!g.__pgtdBaseline) {
   g.__pgtdBaseline = new Map(TASKS_SEED.map((t) => [t.id, { start: t.start, due: t.due }]));
 }
 
+if (!g.__pgtdCapture) g.__pgtdCapture = new Map();
+if (g.__pgtdPublished === undefined) g.__pgtdPublished = null;
+
 const tasks = () => g.__pgtdTasks!;
 const comments = () => g.__pgtdComments!;
 const uploads = () => g.__pgtdUploads!;
 const baselines = () => g.__pgtdBaseline!;
 const evidenceStatus = () => g.__pgtdEvidence!;
 const auditLog = () => g.__pgtdAudit!;
+const capture = () => g.__pgtdCapture!;
 
 /* ═══ Prisma opcional (write-through) ═══ */
 
@@ -387,6 +409,151 @@ export function verifyUploadedEvidence(
   return { ok: true };
 }
 
+/* ═══ Captura de la medición A3 ═══
+   El instrumento se aplica desde la plataforma: el responsable de línea
+   registra la percepción de SUS variables; el consultor califica D/I/K
+   contra los criterios del protocolo y asigna el nivel 1–5 contra la
+   rúbrica (garantía de independencia). Publicar exige las 52 calificadas
+   y conmuta la medición vigente de toda la lógica del servidor. */
+
+const inRange = (v: unknown, min: number, max: number) =>
+  typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
+
+export function getCapture(): Record<string, VariableCapture> {
+  return Object.fromEntries(capture());
+}
+
+export function captureProgress() {
+  const caps = capture();
+  let perception = 0, dik = 0, level = 0;
+  for (const v of VARIABLES) {
+    const c = caps.get(v.id);
+    if (!c) continue;
+    if (c.perception !== undefined) perception++;
+    if (c.d !== undefined && c.i !== undefined && c.k !== undefined) dik++;
+    if (c.level !== undefined) level++;
+  }
+  return { total: VARIABLES.length, perception, dik, level };
+}
+
+export function captureVariable(
+  user: SessionUser,
+  varId: string,
+  patch: { perception?: number; d?: number; i?: number; k?: number; level?: number; note?: string },
+): { ok: true; capture: VariableCapture } | { ok: false; status: number; error: string } {
+  const v = VARIABLES.find((x) => x.id === varId);
+  if (!v) return { ok: false, status: 404, error: "La variable no existe en el instrumento." };
+  if (g.__pgtdPublished) {
+    return { ok: false, status: 422, error: "El corte A3 ya está publicado: la captura está cerrada." };
+  }
+
+  // permiso: captura total (consultor) o de la línea propia (responsable)
+  if (!can(user, "capture_maturity", v.line)) {
+    return {
+      ok: false, status: 403,
+      error: user.role === "RESPONSABLE"
+        ? `No puedes capturar variables de la línea 4.${v.line}: tu ámbito es la línea 4.${user.line}.`
+        : "Tu rol no participa en la captura de la medición.",
+    };
+  }
+
+  // la calificación (D/I/K y nivel) es del consultor: independencia de la medición
+  const grading = patch.d !== undefined || patch.i !== undefined ||
+    patch.k !== undefined || patch.level !== undefined;
+  if (grading && !can(user, "publish_maturity")) {
+    return {
+      ok: false, status: 403,
+      error: "La calificación de evidencia (D/I/K) y el nivel son del equipo consultor; tu captura registra la percepción del autodiagnóstico.",
+    };
+  }
+
+  // rangos
+  if (patch.perception !== undefined && !inRange(patch.perception, 1, 5)) {
+    return { ok: false, status: 422, error: "La percepción es un entero 1–5 (Likert)." };
+  }
+  for (const [k2, max] of [["d", 4], ["i", 4], ["k", 4], ["level", 5]] as const) {
+    const val = patch[k2 as "d" | "i" | "k" | "level"];
+    if (val !== undefined && !inRange(val, k2 === "level" ? 1 : 0, max)) {
+      return { ok: false, status: 422, error: `Valor inválido para ${k2.toUpperCase()}: entero ${k2 === "level" ? "1" : "0"}–${max}.` };
+    }
+  }
+
+  const prev = capture().get(varId) ?? {} as VariableCapture;
+  const next: VariableCapture = {
+    ...prev,
+    ...Object.fromEntries(Object.entries(patch).filter(([, val]) => val !== undefined)),
+    by: user.name,
+    at: new Date().toISOString(),
+  };
+  capture().set(varId, next);
+
+  const what = Object.keys(patch).filter((k2) => patch[k2 as keyof typeof patch] !== undefined).join(", ");
+  audit(user, "task", varId, `captura A3: ${what}`);
+  return { ok: true, capture: next };
+}
+
+/** Publica el corte A3: exige las 52 variables con nivel calificado. */
+export function publishCapture(
+  user: SessionUser,
+): { ok: true; assessment: AssessmentRecord } | { ok: false; status: number; error: string } {
+  if (!can(user, "publish_maturity")) {
+    return { ok: false, status: 403, error: "Solo el equipo consultor publica mediciones." };
+  }
+  if (g.__pgtdPublished) {
+    return { ok: true, assessment: g.__pgtdPublished };
+  }
+  const prog = captureProgress();
+  if (prog.level < prog.total) {
+    return {
+      ok: false, status: 422,
+      error: `Faltan ${prog.total - prog.level} variables por calificar (nivel contra la rúbrica). Una medición parcial no se publica.`,
+    };
+  }
+
+  // celda = promedio simple de sus variables (la misma regla del instrumento)
+  const base = staticCurrent().scores!;
+  const scores: Record<number, Record<string, CellScore>> = {};
+  for (const line of [1, 2, 3, 4]) {
+    scores[line] = {};
+    for (const dim of ["organizacional", "misional", "tecnologica", "datos"]) {
+      const vars = VARIABLES.filter((x) => x.line === line && x.dimension === dim);
+      const avg = vars.reduce((a, x) => a + capture().get(x.id)!.level!, 0) / vars.length;
+      scores[line][dim] = {
+        value: Math.round(avg * 10) / 10,
+        target: base[line][dim].target,     // la meta a 24 meses no cambia con el corte
+      };
+    }
+  }
+
+  const assessment: AssessmentRecord = {
+    id: "A3",
+    label: "Corte de seguimiento 2",
+    period: "2027-08",
+    status: "PUBLICADA",
+    note: `Publicada desde la plataforma por ${user.name}: 52 variables calificadas, percepción ${prog.perception}/52, evidencia D/I/K ${prog.dik}/52.`,
+    scores,
+  };
+  g.__pgtdPublished = assessment;
+  audit(user, "task", "A3", "medición A3 publicada (corte vigente)");
+  return { ok: true, assessment };
+}
+
+/* ── medición efectiva: la publicada en el store manda sobre el seed ── */
+
+export const publishedAssessment = (): AssessmentRecord | null => g.__pgtdPublished ?? null;
+
+export const effectiveCurrent = (): AssessmentRecord =>
+  g.__pgtdPublished ?? staticCurrent();
+
+export const effectivePrevious = (): AssessmentRecord | null =>
+  g.__pgtdPublished ? staticCurrent() : staticPrevious();
+
+export const effectiveAssessments = () =>
+  SCORES_HISTORY.map((a) =>
+    a.id === "A3" && g.__pgtdPublished
+      ? { id: a.id, label: a.label, period: g.__pgtdPublished!.period, status: "PUBLICADA" as const, note: g.__pgtdPublished!.note }
+      : { id: a.id, label: a.label, period: a.period, status: a.status, note: a.note });
+
 /* ═══ Utilidad para la demo ═══ */
 
 export function resetStore() {
@@ -396,6 +563,8 @@ export function resetStore() {
   g.__pgtdComments = [];
   g.__pgtdUploads = [];
   g.__pgtdBaseline = new Map(TASKS_SEED.map((t) => [t.id, { start: t.start, due: t.due }]));
+  g.__pgtdCapture = new Map();
+  g.__pgtdPublished = null;
 }
 
 export { DEMO_TODAY, responsible };

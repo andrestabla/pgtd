@@ -7,6 +7,11 @@ import { useId } from "react";
 import { LINES, DIMENSIONS, SCORES, lineScore, lineTarget, type Muni } from "@/data/demo";
 import { CO_PATHS, CO_VIEW, CESAR_MARK, CESAR_PATH, CESAR_VIEW, projectCesar } from "@/data/geo";
 
+/** Mapa de puntajes línea → dimensión (el de la medición vigente por defecto). */
+export type ScoresMap = Record<number, Record<string, { value: number; target: number }>>;
+
+const fmtLevel = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1).replace(".", ","));
+
 /* ─── Gauge institucional (semicírculo) ─────────────────────────────────── */
 
 export function ScoreGauge({ value, max = 5, size = 210 }:
@@ -58,7 +63,7 @@ export function ScoreGauge({ value, max = 5, size = 210 }:
 
 /* ─── Radar de madurez (4 ejes) ─────────────────────────────────────────── */
 
-export function MaturityRadar({ size = 380 }: { size?: number }) {
+export function MaturityRadar({ size = 380, scores }: { size?: number; scores?: ScoresMap }) {
   const gid = useId();
   const cx = size / 2, cy = size / 2 + 8;
   const rMax = size * 0.31;
@@ -70,8 +75,12 @@ export function MaturityRadar({ size = 380 }: { size?: number }) {
   const poly = (vals: number[]) =>
     vals.map((v, i) => pt(i, v).map((n) => n.toFixed(1)).join(",")).join(" ");
 
-  const actual = LINES.map((l) => lineScore(l.n));
-  const target = LINES.map((l) => lineTarget(l.n));
+  const avgOf = (n: number, key: "value" | "target") => {
+    const dims = Object.values(scores![n]);
+    return dims.reduce((a, d) => a + d[key], 0) / dims.length;
+  };
+  const actual = LINES.map((l) => (scores ? avgOf(l.n, "value") : lineScore(l.n)));
+  const target = LINES.map((l) => (scores ? avgOf(l.n, "target") : lineTarget(l.n)));
   const perimeter = 4 * Math.SQRT2 * rMax; // aproximación suficiente para el dash
 
   return (
@@ -217,9 +226,10 @@ export function MiniRadar({ axes, color = "var(--cyan)", size = 200, max = 5 }: 
 
 const LEVEL_BG = ["", "var(--n1)", "var(--n2)", "var(--n3)", "var(--n4)", "var(--n5)"];
 
-export function MaturityHeatmap({ onCell, selected }: {
+export function MaturityHeatmap({ onCell, selected, scores }: {
   onCell?: (line: number, dim: string) => void;
   selected?: { line: number; dim: string } | null;
+  scores?: ScoresMap;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -233,17 +243,18 @@ export function MaturityHeatmap({ onCell, selected }: {
         ))}
         {LINES.map((l) => (
           <FragmentRow key={l.n} line={l.n} code={l.code} short={l.short}
-            onCell={onCell} selected={selected} />
+            onCell={onCell} selected={selected} scores={scores ?? SCORES} />
         ))}
       </div>
     </div>
   );
 }
 
-function FragmentRow({ line, code, short, onCell, selected }: {
+function FragmentRow({ line, code, short, onCell, selected, scores }: {
   line: number; code: string; short: string;
   onCell?: (line: number, dim: string) => void;
   selected?: { line: number; dim: string } | null;
+  scores: ScoresMap;
 }) {
   return (
     <>
@@ -251,18 +262,19 @@ function FragmentRow({ line, code, short, onCell, selected }: {
         {code} <span className="font-semibold text-ink-soft">{short}</span>
       </div>
       {DIMENSIONS.map((d) => {
-        const s = SCORES[line][d.key];
+        const s = scores[line][d.key];
+        const lvl = Math.max(1, Math.min(5, Math.round(s.value)));
         const isSel = selected?.line === line && selected?.dim === d.key;
         return (
           <button key={d.key} onClick={() => onCell?.(line, d.key)}
             className={`num relative w-full cursor-pointer rounded-xl py-2.5 text-[15px] font-extrabold text-white transition-all duration-150 hover:scale-[1.05] hover:shadow-lg ${
               isSel ? "scale-[1.05] shadow-lg ring-2 ring-navy ring-offset-2" : ""}`}
             style={{
-              background: `linear-gradient(160deg, color-mix(in srgb, ${LEVEL_BG[s.value]} 88%, white) 0%, ${LEVEL_BG[s.value]} 100%)`,
-              boxShadow: isSel ? undefined : `inset 0 1px 0 rgb(255 255 255 / 0.22), 0 1px 3px color-mix(in srgb, ${LEVEL_BG[s.value]} 35%, transparent)`,
+              background: `linear-gradient(160deg, color-mix(in srgb, ${LEVEL_BG[lvl]} 88%, white) 0%, ${LEVEL_BG[lvl]} 100%)`,
+              boxShadow: isSel ? undefined : `inset 0 1px 0 rgb(255 255 255 / 0.22), 0 1px 3px color-mix(in srgb, ${LEVEL_BG[lvl]} 35%, transparent)`,
             }}
-            title={`${code} · ${d.name}: nivel ${s.value} → meta ${s.target}`}>
-            {s.value}
+            title={`${code} · ${d.name}: nivel ${fmtLevel(s.value)} → meta ${s.target}`}>
+            {fmtLevel(s.value)}
             <span className="absolute bottom-[3px] right-[7px] text-[8px] font-semibold opacity-70">
               →{s.target}
             </span>

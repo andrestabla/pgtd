@@ -10,7 +10,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader, Card, CardHeader, LevelBadge, StateDot } from "@/components/ui";
-import { AccessChip } from "@/components/user-context";
+import { AccessChip, useCan } from "@/components/user-context";
+import { CapturaOverview, CapturaForm } from "./captura";
+import { useMaturity } from "@/lib/use-maturity";
 import { MaturityRadar, MaturityHeatmap, MiniRadar } from "@/components/charts";
 import { LINES, DIMENSIONS, SCORES, LEVELS, EVIDENCES, fmtNum, lineScore } from "@/data/demo";
 import { ASSESSMENTS, responsible } from "@/data/cmi";
@@ -38,7 +40,7 @@ const FRAME_COLORS: Record<Frame, string> = {
   "ISO 27001": "var(--bad)", CMI: "var(--muted)",
 };
 
-type Tab = "resumen" | "variables" | "dominios" | "registros" | "ies";
+type Tab = "resumen" | "variables" | "dominios" | "registros" | "ies" | "captura";
 
 const TABS: { id: Tab; label: string; icon: typeof Layers }[] = [
   { id: "resumen", label: "Resumen", icon: Layers },
@@ -48,10 +50,12 @@ const TABS: { id: Tab; label: string; icon: typeof Layers }[] = [
   { id: "ies", label: "Índices IES", icon: Sigma },
 ];
 
+const CAPTURA_TAB = { id: "captura" as Tab, label: "Captura A3", icon: ClipboardList };
+
 // ancla de la página de Metodología que explica las convenciones de cada vista
 const HELP_ANCHOR: Record<Tab, string> = {
   resumen: "escala", variables: "variables", dominios: "dominios",
-  registros: "registros", ies: "ies",
+  registros: "registros", ies: "ies", captura: "protocolo",
 };
 
 const DIM_SHORT: Record<string, string> = {
@@ -61,11 +65,11 @@ const DIM_SHORT: Record<string, string> = {
 // segmento de ruta ↔ vista: /panel/madurez/<segmento>[/<ID de variable>]
 const SEG_BY_TAB: Record<Tab, string> = {
   resumen: "resumen", variables: "variables", dominios: "dominios",
-  registros: "registros", ies: "indices",
+  registros: "registros", ies: "indices", captura: "captura",
 };
 const TAB_BY_SEG: Record<string, Tab> = {
   resumen: "resumen", variables: "variables", dominios: "dominios",
-  registros: "registros", indices: "ies", ies: "ies",
+  registros: "registros", indices: "ies", ies: "ies", captura: "captura",
 };
 
 // Los filtros sobreviven a la navegación entre rutas del módulo (la página se
@@ -87,6 +91,16 @@ export default function MadurezPage() {
   const openVarId = tab === "variables" && slug[1]
     ? decodeURIComponent(slug[1]).toUpperCase()
     : null;
+  const capturaVarId = tab === "captura" && slug[1]
+    ? decodeURIComponent(slug[1]).toUpperCase()
+    : null;
+
+  const canCapture = useCan("capture_maturity");
+  const { data: matData, scores: effScores } = useMaturity();
+  const effLineScore = (n: number) => {
+    const dims = Object.values(effScores[n]);
+    return dims.reduce((a, d) => a + d.value, 0) / dims.length;
+  };
 
   const [cellFilter, setCellState] = useState(FILTERS.cell);
   const [lineFilter, setLineState] = useState(FILTERS.line);
@@ -128,15 +142,15 @@ export default function MadurezPage() {
 
   return (
     <>
-      {!openVarId && (
+      {!openVarId && !capturaVarId && (
       <PageHeader kicker="M1 · Diagnóstico de madurez" title="Madurez por línea y dimensión"
         desc={`${VARIABLES.length} variables medidas contra 8 referentes (eMM, Decreto 1330, CNA, TOGAF, DAMA, INTEF, ISO 27001, CMI), con hallazgo, recomendación y evidencia por variable.`}  actions={<AccessChip module="madurez" />} />
       )}
 
       {/* selector de vista */}
-      {!openVarId && (
+      {!openVarId && !capturaVarId && (
       <div className="rise mb-6 flex flex-wrap gap-1.5 rounded-2xl bg-surface-2 p-1.5">
-        {TABS.map((t) => (
+        {(canCapture ? [...TABS, CAPTURA_TAB] : TABS).map((t) => (
           <button key={t.id}
             onClick={() => navTab(t.id)}
             className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[12.5px] font-bold transition-all ${
@@ -174,14 +188,16 @@ export default function MadurezPage() {
 
           <div className="grid gap-5 lg:grid-cols-5">
             <Card className="rise rise-1 lg:col-span-2">
-              <CardHeader title="Radar institucional" sub="Actual vs. meta a 24 meses" />
-              <div className="px-5 py-3"><MaturityRadar size={360} /></div>
+              <CardHeader title="Radar institucional"
+                sub={`Corte vigente ${matData?.current.id ?? "A2"} · ${matData?.current.period ?? "2027-02"} vs. meta a 24 meses`}
+                right={matData?.published ? <span className="chip chip-cyan">A3 publicado</span> : undefined} />
+              <div className="px-5 py-3"><MaturityRadar size={360} scores={effScores} /></div>
             </Card>
 
             <Card className="rise rise-2 lg:col-span-3">
               <CardHeader title="Mapa de calor" sub="Clic en una celda para abrir sus variables" />
               <div className="px-5 py-4">
-                <MaturityHeatmap onCell={openCell} />
+                <MaturityHeatmap onCell={openCell} scores={effScores} />
               </div>
               <div className="flex flex-wrap items-center gap-3 border-t border-line px-5 py-3">
                 {LEVELS.map((lv) => (
@@ -201,8 +217,8 @@ export default function MadurezPage() {
               {LINES.map((l) => {
                 const axes = DIMENSIONS.map((d) => ({
                   label: DIM_SHORT[d.key],
-                  value: SCORES[l.n][d.key].value,
-                  target: SCORES[l.n][d.key].target,
+                  value: effScores[l.n][d.key].value,
+                  target: effScores[l.n][d.key].target,
                 }));
                 return (
                   <Card key={l.n} hover>
@@ -211,7 +227,7 @@ export default function MadurezPage() {
                         {l.code} <span className="font-semibold text-ink-soft">{l.short}</span>
                       </span>
                       <span className="num shrink-0 text-[14px] font-extrabold" style={{ color: l.color }}>
-                        {fmtNum(lineScore(l.n), 1)}
+                        {fmtNum(effLineScore(l.n), 1)}
                       </span>
                     </div>
                     <div className="px-2 pb-1"><MiniRadar axes={axes} color={l.color} /></div>
@@ -228,10 +244,10 @@ export default function MadurezPage() {
               {DIMENSIONS.map((d) => {
                 const axes = LINES.map((l) => ({
                   label: l.code,
-                  value: SCORES[l.n][d.key].value,
-                  target: SCORES[l.n][d.key].target,
+                  value: effScores[l.n][d.key].value,
+                  target: effScores[l.n][d.key].target,
                 }));
-                const avg = LINES.reduce((a, l) => a + SCORES[l.n][d.key].value, 0) / LINES.length;
+                const avg = LINES.reduce((a, l) => a + effScores[l.n][d.key].value, 0) / LINES.length;
                 return (
                   <Card key={d.key} hover>
                     <div className="flex items-baseline justify-between gap-2 px-4 pt-3.5">
@@ -260,7 +276,7 @@ export default function MadurezPage() {
               <span className="p-sub">el valor del instrumento está en la serie, no en el dato único</span>
             </div>
             <div className="grid gap-3 px-5 pb-5 pt-2 sm:grid-cols-3">
-              {ASSESSMENTS.map((m) => (
+              {(matData?.assessments ?? ASSESSMENTS).map((m) => (
                 <div key={m.id} className="rounded-xl bg-surface-2/60 px-4 py-3">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-[13px] font-bold text-ink">{m.label}</span>
@@ -346,6 +362,20 @@ export default function MadurezPage() {
       {openVarId && (
         <VariablePage id={openVarId} list={filteredVars}
           onClose={closeVariable} onNav={openVariable} />
+      )}
+
+      {/* ═══════════ CAPTURA A3 ═══════════ */}
+      {tab === "captura" && !capturaVarId && (
+        canCapture
+          ? <CapturaOverview onOpenVar={(id) => go(`/panel/madurez/captura/${id}`)} />
+          : <p className="rounded-xl bg-surface-2 px-5 py-6 text-[13px] text-muted">
+              Tu rol no participa en la captura de la medición.
+            </p>
+      )}
+      {capturaVarId && (
+        <CapturaForm id={capturaVarId}
+          onClose={() => go("/panel/madurez/captura")}
+          onNav={(id) => go(`/panel/madurez/captura/${id}`)} />
       )}
 
       {/* ═══════════ DOMINIOS ═══════════ */}

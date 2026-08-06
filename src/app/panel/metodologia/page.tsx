@@ -144,7 +144,11 @@ export default function MetodologiaPage() {
             <p>
               <b className="text-ink">La madurez es una serie, no una foto:</b> A1 (línea base) → A2
               (corte publicado vigente, el que alimenta toda la plataforma) → A3 (en captura).
-              Cada corte queda versionado y comparable.
+              Cada corte queda versionado y comparable. La captura del corte se hace{" "}
+              <b className="text-ink">desde la plataforma</b> (pestaña «Captura A3»): el responsable de
+              línea registra la percepción de sus variables, el consultor califica D/I/K y asigna el
+              nivel contra la rúbrica, y al publicar —exige las 52 calificadas— el corte nuevo pasa a
+              ser la medición vigente de todos los tableros.
             </p>
             <p>
               Conviven <b className="text-ink">dos escalas deliberadamente</b>: la 1–5 (nivel verificado por

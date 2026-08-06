@@ -7,11 +7,18 @@
 
 import {
   KPI_CATALOG, INITIATIVES_FULL, EVIDENCE_CATALOG, SCORES_HISTORY,
-  CMI_OBJECTIVES, responsible, currentAssessment, previousAssessment,
+  CMI_OBJECTIVES, responsible,
   type KpiFull, type InitiativeFull,
 } from "@/data/cmi";
 import { LINES, DIMENSIONS } from "@/data/demo";
 import { taskAlerts } from "@/lib/proyectos";
+// medición vigente EFECTIVA: si el corte A3 se publicó desde la plataforma,
+// el store manda; si no, rige el seed (A2)
+import {
+  effectiveCurrent as currentAssessment,
+  effectivePrevious as previousAssessment,
+  publishedAssessment,
+} from "@/server/store";
 
 /* ═══ Utilidades de periodo ═══ */
 
@@ -258,7 +265,9 @@ export function maturityRollup() {
     },
     cellsWithoutEvidence: cells.filter((c) => c.evidences === 0),
     unverifiedEvidences: EVIDENCE_CATALOG.filter((e) => e.status === "PENDIENTE").length,
-    history: SCORES_HISTORY.filter((a) => a.scores).map((a) => ({
+    history: SCORES_HISTORY
+      .map((a) => (a.id === "A3" && publishedAssessment() ? publishedAssessment()! : a))
+      .filter((a) => a.scores).map((a) => ({
       id: a.id, period: a.period,
       institution:
         LINES.reduce(
