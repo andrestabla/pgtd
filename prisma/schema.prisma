@@ -88,7 +88,9 @@ model ProjectTask {
   initiativeId     String?            // Initiative.id (cuid) — se resuelve en seed
   iniCode          String             // i1… (código estable del catálogo)
   title            String
-  assigneeId       String
+  desc             String?            // alcance verificable de la actividad
+  assigneeId       String             // responsable principal
+  coAssigneeIds    String[] @default([])  // corresponsables (Person.id)
   assignee         Person   @relation(fields: [assigneeId], references: [id])
   start            DateTime
   due              DateTime

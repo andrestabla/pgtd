@@ -13,12 +13,13 @@ import { AccessChip, useUser } from "@/components/user-context";
 import { INITIATIVES, EVIDENCES } from "@/data/demo";
 import {
   initials, isOverdue as isOverdueFn, dueSoon as dueSoonFn, DEMO_TODAY,
-  TASK_STATUS_META, type Task, type TaskStatus, type Person,
+  TASK_STATUS_META, person as personFn, assigneesOf,
+  type Task, type TaskStatus, type Person,
 } from "@/data/proyectos";
 import type { TaskAlert, Workload } from "@/lib/proyectos";
 import {
   KanbanSquare, CalendarRange, Users, X, Link2, FileText, ShieldCheck,
-  AlertTriangle, Lock, ChevronRight, Loader2, Save, History,
+  AlertTriangle, Lock, ChevronRight, Loader2, Save, History, Paperclip,
 } from "lucide-react";
 
 type View = "tablero" | "cronograma" | "personas";
@@ -114,7 +115,7 @@ export default function ProyectosPage() {
   const filtered = useMemo(() => {
     let list = tasks;
     if (iniFilter) list = list.filter((t) => t.iniId === iniFilter);
-    if (personFilter) list = list.filter((t) => t.assigneeId === personFilter);
+    if (personFilter) list = list.filter((t) => assigneesOf(t).includes(personFilter));
     return list;
   }, [tasks, iniFilter, personFilter]);
 
@@ -171,9 +172,10 @@ export default function ProyectosPage() {
         <StatCard label="Vencen en 14 días" value={data.stats.dueSoon} unit="tareas"
           foot="La ventana de gestión de esta quincena"
           accent="linear-gradient(90deg, var(--warn), var(--gold))" />
-        <StatCard label="Con evidencia adjunta" value={data.stats.withEvidence}
-          unit={`de ${tasks.filter((t) => t.requiresEvidence).length} exigidas`}
-          foot={`${data.stats.people} personas con tareas asignadas`}
+        <StatCard label="Hechas con evidencia"
+          value={tasks.filter((t) => t.status === "HECHA" && (t.evidenceIds?.length ?? 0) > 0).length}
+          unit={`de ${data.stats.byStatus.HECHA} hechas`}
+          foot={`Regla dura: ninguna actividad se cierra sin soporte · ${data.stats.people} personas asignadas`}
           accent="linear-gradient(90deg, var(--n4), var(--n5))" />
       </div>
 
@@ -449,10 +451,26 @@ function TaskCard({ t, person: p, onOpen }: { t: Task; person: Person | null; on
       <div className="text-[12px] font-bold leading-snug text-ink">{t.title}</div>
       <div className="mt-1.5 truncate text-[9.5px] text-faint">{ini.name}</div>
       <div className="mt-2 flex items-center justify-between">
-        <span className="num grid h-6 w-6 place-items-center rounded-full text-[8.5px] font-extrabold text-white"
-          style={{ background: "linear-gradient(135deg, var(--cyan-deep), var(--navy))" }}
-          title={p?.name}>
-          {p ? initials(p.name) : "?"}
+        <span className="flex items-center -space-x-1.5">
+          <span className="num grid h-6 w-6 place-items-center rounded-full text-[8.5px] font-extrabold text-white ring-2 ring-surface"
+            style={{ background: "linear-gradient(135deg, var(--cyan-deep), var(--navy))" }}
+            title={p ? `${p.name} (responsable)` : undefined}>
+            {p ? initials(p.name) : "?"}
+          </span>
+          {(t.coAssigneeIds ?? []).slice(0, 2).map((cid) => {
+            const cp = personFn(cid);
+            return (
+              <span key={cid} className="num grid h-6 w-6 place-items-center rounded-full bg-surface-3 text-[8.5px] font-extrabold text-ink-soft ring-2 ring-surface"
+                title={`${cp.name} (corresponsable)`}>
+                {initials(cp.name)}
+              </span>
+            );
+          })}
+          {(t.coAssigneeIds?.length ?? 0) > 2 && (
+            <span className="num grid h-6 w-6 place-items-center rounded-full bg-surface-2 text-[8px] font-bold text-faint ring-2 ring-surface">
+              +{t.coAssigneeIds!.length - 2}
+            </span>
+          )}
         </span>
         <span className="flex items-center gap-1.5">
           {(t.evidenceIds?.length ?? 0) > 0 && <FileText size={11} className="text-cyan-deep" />}
@@ -494,13 +512,21 @@ function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus
   const [commentText, setCommentText] = useState("");
   const [evTitle, setEvTitle] = useState("");
   const [evFile, setEvFile] = useState<File | null>(null);
-  const [draft, setDraft] = useState({ status: task.status, assigneeId: task.assigneeId, start: task.start, due: task.due });
+  const [draft, setDraft] = useState({
+    status: task.status, assigneeId: task.assigneeId,
+    coAssigneeIds: task.coAssigneeIds ?? [], start: task.start, due: task.due,
+  });
   useEffect(() => {
-    setDraft({ status: task.status, assigneeId: task.assigneeId, start: task.start, due: task.due });
+    setDraft({
+      status: task.status, assigneeId: task.assigneeId,
+      coAssigneeIds: task.coAssigneeIds ?? [], start: task.start, due: task.due,
+    });
   }, [task]);
   const dirty = draft.status !== task.status || draft.assigneeId !== task.assigneeId
-    || draft.start !== task.start || draft.due !== task.due;
+    || draft.start !== task.start || draft.due !== task.due
+    || draft.coAssigneeIds.join(",") !== (task.coAssigneeIds ?? []).join(",");
   const assignee = personOf(task.assigneeId);
+  const coAssignees = (task.coAssigneeIds ?? []).map((cid) => personOf(cid)).filter(Boolean) as Person[];
 
   return (
     <div className="order-first min-w-0 lg:order-none lg:sticky lg:top-[70px] lg:self-start">
@@ -516,12 +542,21 @@ function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus
         <div className="space-y-4 px-5 pb-5">
           <h3 className="text-[14px] font-extrabold leading-snug text-ink">{task.title}</h3>
 
-          {/* responsable */}
+          {/* descripción: qué se hace y qué produce */}
+          <p className="rounded-lg bg-surface-2/60 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-soft">
+            {task.desc}
+          </p>
+
+          {/* responsable principal */}
           {editable ? (
             <div>
-              <div className="label mb-1 !text-[8.5px]">Responsable</div>
+              <div className="label mb-1 !text-[8.5px]">Responsable principal</div>
               <select value={draft.assigneeId}
-                onChange={(e) => setDraft({ ...draft, assigneeId: e.target.value })}
+                onChange={(e) => setDraft({
+                  ...draft,
+                  assigneeId: e.target.value,
+                  coAssigneeIds: draft.coAssigneeIds.filter((c) => c !== e.target.value),
+                })}
                 className="input !py-2 text-[12.5px]">
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>{p.name} — {p.cargo}</option>
@@ -542,6 +577,59 @@ function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus
               </div>
             )
           )}
+
+          {/* corresponsables */}
+          <div>
+            <div className="label mb-1.5 !text-[8.5px]">
+              Corresponsables {editable ? "" : `(${coAssignees.length})`}
+            </div>
+            {editable ? (
+              <>
+                <div className="flex flex-wrap gap-1.5">
+                  {draft.coAssigneeIds.map((cid) => {
+                    const cp = personOf(cid);
+                    return (
+                      <span key={cid} className="chip chip-cyan">
+                        {cp?.name ?? cid}
+                        <button
+                          onClick={() => setDraft({ ...draft, coAssigneeIds: draft.coAssigneeIds.filter((c) => c !== cid) })}
+                          className="ml-0.5 cursor-pointer" title="Quitar">
+                          <X size={10} />
+                        </button>
+                      </span>
+                    );
+                  })}
+                  {draft.coAssigneeIds.length === 0 && (
+                    <span className="text-[10.5px] italic text-faint">Sin corresponsables</span>
+                  )}
+                </div>
+                <select value=""
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setDraft({ ...draft, coAssigneeIds: [...draft.coAssigneeIds, e.target.value] });
+                    }
+                  }}
+                  className="input mt-1.5 !py-1.5 text-[11.5px] text-muted">
+                  <option value="">+ Añadir corresponsable…</option>
+                  {people
+                    .filter((p) => p.id !== draft.assigneeId && !draft.coAssigneeIds.includes(p.id))
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>{p.name} — {p.cargo}</option>
+                    ))}
+                </select>
+              </>
+            ) : coAssignees.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {coAssignees.map((cp) => (
+                  <span key={cp.id} className="chip" title={`${cp.cargo} · ${cp.email}`}>
+                    {cp.name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-[10.5px] italic text-faint">Sin corresponsables</span>
+            )}
+          </div>
 
           {/* fechas */}
           <div className="grid grid-cols-2 gap-3">
@@ -687,38 +775,42 @@ function TaskSheet({ task, people, personOf, editable, canVerify, evidenceStatus
                 )}
               </div>
             ))}
-            {(task.evidenceIds?.length ?? 0) === 0 && uploads.length === 0 && (
-              task.requiresEvidence ? (
-                <p className="rounded-lg px-3 py-2 text-[11.5px]"
-                  style={{ background: "color-mix(in srgb, var(--warn) 10%, white)", color: "var(--warn)" }}>
-                  El cierre exige evidencia: el servidor rechazará «Hecha» sin soporte adjunto.
-                </p>
-              ) : (
-                <p className="text-[11px] italic text-faint">No exige evidencia formal.</p>
-              )
+            {(task.evidenceIds?.length ?? 0) === 0 && uploads.length === 0 && task.status !== "HECHA" && (
+              <p className="rounded-lg px-3 py-2 text-[11.5px]"
+                style={{ background: "color-mix(in srgb, var(--warn) 10%, white)", color: "var(--warn)" }}>
+                Toda actividad exige al menos una evidencia: el servidor rechazará «Hecha» sin soporte adjunto.
+              </p>
             )}
             {/* adjuntar archivo (si puede editar) */}
             {editable && (
-              <div className="mt-2 space-y-1.5 rounded-lg bg-surface-2/70 p-2.5">
+              <div className="mt-2 space-y-2 rounded-lg bg-surface-2/70 p-2.5">
                 <input type="text" placeholder="Título de la evidencia (p. ej. Acta del comité)"
                   value={evTitle} onChange={(e) => setEvTitle(e.target.value)}
                   className="input !py-1.5 text-[11.5px]" />
-                <div className="flex items-center gap-2">
-                  <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.zip,.csv"
-                    onChange={(e) => setEvFile(e.target.files?.[0] ?? null)}
-                    className="flex-1 text-[10.5px] text-muted file:mr-2 file:rounded-lg file:border-0 file:bg-surface file:px-2.5 file:py-1.5 file:text-[10.5px] file:font-bold file:text-ink" />
-                  <button
-                    onClick={async () => {
-                      if (evFile && evTitle.trim()) {
-                        await onUpload(evFile, evTitle, "Documento");
-                        setEvFile(null); setEvTitle("");
-                      }
-                    }}
-                    disabled={saving || !evFile || !evTitle.trim()}
-                    className="btn-ghost !py-1.5 text-[11px] disabled:opacity-40">
-                    Adjuntar
-                  </button>
-                </div>
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-surface px-3 py-2 shadow-sm transition-colors hover:bg-cyan-wash">
+                  <Paperclip size={13} className="shrink-0 text-cyan-deep" />
+                  <span className={`min-w-0 flex-1 truncate text-[11.5px] ${evFile ? "font-semibold text-ink" : "text-muted"}`}>
+                    {evFile ? evFile.name : "Seleccionar archivo…"}
+                  </span>
+                  {evFile && (
+                    <span className="num shrink-0 text-[9.5px] text-faint">{(evFile.size / 1024).toFixed(0)} KB</span>
+                  )}
+                  <input type="file" className="hidden"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.zip,.csv"
+                    onChange={(e) => setEvFile(e.target.files?.[0] ?? null)} />
+                </label>
+                <button
+                  onClick={async () => {
+                    if (evFile && evTitle.trim()) {
+                      await onUpload(evFile, evTitle, "Documento");
+                      setEvFile(null); setEvTitle("");
+                    }
+                  }}
+                  disabled={saving || !evFile || !evTitle.trim()}
+                  className="btn-primary w-full !py-1.5 text-[11.5px] disabled:opacity-40">
+                  {saving ? <Loader2 size={12} className="animate-spin" /> : <Paperclip size={12} />}
+                  Adjuntar evidencia
+                </button>
                 <p className="text-[9.5px] text-faint">
                   Máx. 15 MB · pdf, office, imagen, zip, csv · nace pendiente de verificación del consultor.
                 </p>

@@ -455,7 +455,7 @@ test("estados de práctica: derivación D/I/K y distribución completa", () => {
 
 /* ─── gestor de proyectos ─── */
 
-import { TASKS, PEOPLE, isOverdue, DEMO_TODAY } from "../src/data/proyectos";
+import { TASKS, PEOPLE, isOverdue, DEMO_TODAY, assigneesOf } from "../src/data/proyectos";
 import { taskAlerts, workload, initiativeTaskStats, portfolioTaskStats } from "../src/lib/proyectos";
 import { buildAlerts as buildAllAlerts } from "../src/lib/logic";
 
@@ -490,6 +490,23 @@ test("proyectos: vencidas detectadas y con la historia esperada", () => {
   for (const t of TASKS.filter((t) => t.status === "HECHA")) assert.ok(!isOverdue(t), t.id);
 });
 
+test("proyectos: toda tarea tiene descripción y toda HECHA tiene evidencia", () => {
+  for (const t of TASKS) {
+    assert.ok(t.desc.trim().length > 20, `${t.id}: descripción vacía o trivial`);
+    if (t.status === "HECHA") {
+      assert.ok((t.evidenceIds?.length ?? 0) > 0,
+        `${t.id}: hecha sin evidencia — viola la regla dura del cierre`);
+    }
+    // corresponsables: personas válidas, sin duplicar al principal
+    for (const c of t.coAssigneeIds ?? []) {
+      assert.notEqual(c, t.assigneeId, `${t.id}: corresponsable duplica al principal`);
+      assert.ok(c.startsWith("P"), `${t.id}: corresponsable inválido ${c}`);
+    }
+  }
+  // el banco incluye tareas con corresponsables (multi-responsable en la demo)
+  assert.ok(TASKS.some((t) => (t.coAssigneeIds?.length ?? 0) > 0));
+});
+
 test("proyectos: alertas de tareas tipificadas e integradas al motor global", () => {
   const ta = taskAlerts();
   assert.ok(ta.some((a) => a.kind === "TAREA_VENCIDA"));
@@ -506,8 +523,11 @@ test("proyectos: alertas de tareas tipificadas e integradas al motor global", ()
 test("proyectos: carga por persona y estadísticas del portafolio consistentes", () => {
   const w = workload();
   assert.ok(w.length >= 10, "la mayoría del directorio tiene tareas");
+  // con corresponsables, cada tarea cuenta una vez por cada responsable
   const sumTotal = w.reduce((a, x) => a + x.total, 0);
-  assert.equal(sumTotal, TASKS.length);
+  const totalAssignments = TASKS.reduce((a, t) => a + assigneesOf(t).length, 0);
+  assert.equal(sumTotal, totalAssignments);
+  assert.ok(sumTotal > TASKS.length, "los corresponsables suman carga por persona");
   const s = portfolioTaskStats();
   assert.equal(Object.values(s.byStatus).reduce((a, b) => a + b, 0), s.total);
   assert.ok(DEMO_TODAY.startsWith("2027-03"), "hoy demo coherente con DEMO_NOW_INDEX");

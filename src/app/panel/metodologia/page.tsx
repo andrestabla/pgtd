@@ -510,9 +510,14 @@ export default function MetodologiaPage() {
             <p><b className="text-ink">Vencida</b> = fecha compromiso pasada sin cerrar (fecha en rojo). <b className="text-ink">Próxima</b> = vence en ≤ 14 días (ámbar).</p>
             <p>
               <b className="text-ink">Reglas de cierre que el servidor exige</b> (no son sugerencias — la API
-              responde 422 con la explicación): cerrar un entregable requiere evidencia adjunta (del catálogo
-              o un archivo subido); bloquear exige registrar el motivo; la fecha compromiso no puede ser
-              anterior al inicio.
+              responde 422 con la explicación): <b className="text-ink">ninguna actividad se cierra sin al menos
+              una evidencia adjunta</b> (del catálogo o un archivo subido); bloquear exige registrar el motivo;
+              la fecha compromiso no puede ser anterior al inicio.
+            </p>
+            <p>
+              Cada actividad declara su <b className="text-ink">descripción</b> (qué se hace y qué produce),
+              un <b className="text-ink">responsable principal</b> y los <b className="text-ink">corresponsables</b>{" "}
+              que apoyan la ejecución — la carga por persona cuenta ambos roles.
             </p>
             <p>
               <b className="text-ink">Línea base:</b> el cronograma original queda congelado; cada

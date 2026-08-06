@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
-  PEOPLE, person, isOverdue, dueSoon, DEMO_TODAY,
+  PEOPLE, person, isOverdue, dueSoon, DEMO_TODAY, assigneesOf,
   type Task, type TaskStatus,
 } from "@/data/proyectos";
 import { getTasks } from "@/server/store";
@@ -64,14 +64,15 @@ export function taskAlerts(): TaskAlert[] {
       });
     }
 
-    if (t.status === "HECHA" && t.requiresEvidence && !(t.evidenceIds?.length)) {
+    // toda tarea hecha debe tener al menos una evidencia (regla dura del cierre)
+    if (t.status === "HECHA" && !(t.evidenceIds?.length)) {
       alerts.push({
         id: `te-${t.id}`,
         kind: "ENTREGABLE_SIN_EVIDENCIA",
         severity: 3,
         taskId: t.id,
         title: t.title,
-        detail: `Cerrada sin evidencia adjunta en «${ini.name}»: el cierre exige soporte verificable.`,
+        detail: `Cerrada sin evidencia adjunta en «${ini.name}»: toda actividad exige soporte verificable al cierre.`,
         ownerName: who,
       });
     }
@@ -110,7 +111,8 @@ export type Workload = {
 
 export function workload(): Workload[] {
   return PEOPLE.map((p) => {
-    const mine = TASKS().filter((t) => t.assigneeId === p.id);
+    // cuenta como suya toda tarea donde es principal o corresponsable
+    const mine = TASKS().filter((t) => assigneesOf(t).includes(p.id));
     return {
       personId: p.id,
       name: p.name,
@@ -151,6 +153,6 @@ export function portfolioTaskStats() {
     overdue: TASKS().filter(isOverdue).length,
     dueSoon: TASKS().filter((t) => dueSoon(t)).length,
     withEvidence: TASKS().filter((t) => (t.evidenceIds?.length ?? 0) > 0).length,
-    people: PEOPLE.filter((p) => TASKS().some((t) => t.assigneeId === p.id)).length,
+    people: PEOPLE.filter((p) => TASKS().some((t) => assigneesOf(t).includes(p.id))).length,
   };
 }

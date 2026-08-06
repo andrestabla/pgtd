@@ -9,7 +9,7 @@
 // Todas las mutaciones validan reglas de negocio y escriben auditoría.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { TASKS as TASKS_SEED, type Task, type TaskStatus, DEMO_TODAY } from "@/data/proyectos";
+import { TASKS as TASKS_SEED, PEOPLE, type Task, type TaskStatus, DEMO_TODAY } from "@/data/proyectos";
 import { EVIDENCE_CATALOG, responsible } from "@/data/cmi";
 import type { SessionUser } from "@/lib/session";
 import { can } from "@/lib/permissions";
@@ -107,6 +107,7 @@ export async function hydrateFromDb() {
         if (!r) continue;
         t.status = r.status as TaskStatus;
         t.assigneeId = r.assigneeId;
+        t.coAssigneeIds = (r.coAssigneeIds as string[] | null) ?? t.coAssigneeIds;
         t.start = r.start.toISOString().slice(0, 10);
         t.due = r.due.toISOString().slice(0, 10);
         t.note = r.note ?? t.note;
@@ -182,7 +183,7 @@ function audit(actor: SessionUser, entity: "task" | "evidence", entityId: string
 export async function updateTask(
   user: SessionUser,
   id: string,
-  patch: Partial<Pick<Task, "status" | "assigneeId" | "start" | "due" | "note">> & { blockNote?: string },
+  patch: Partial<Pick<Task, "status" | "assigneeId" | "coAssigneeIds" | "start" | "due" | "note">> & { blockNote?: string },
 ): Promise<MutationResult> {
   const t = getTask(id);
   if (!t) return { ok: false, status: 404, error: "La tarea no existe." };
@@ -204,13 +205,13 @@ export async function updateTask(
     if (!VALID_STATUS.includes(patch.status)) {
       return { ok: false, status: 422, error: "Estado inválido." };
     }
-    // regla: cerrar exige evidencia cuando la tarea la requiere
-    // (cuenta la del catálogo y la subida como archivo)
+    // regla: NINGUNA tarea se cierra sin evidencia — cuenta la del catálogo
+    // y la subida como archivo. Lo hecho se demuestra, no se declara.
     const hasEvidence = (t.evidenceIds?.length ?? 0) > 0 || getUploads(id).length > 0;
-    if (patch.status === "HECHA" && t.requiresEvidence && !hasEvidence) {
+    if (patch.status === "HECHA" && !hasEvidence) {
       return {
         ok: false, status: 422,
-        error: "Esta tarea exige evidencia para cerrarse: adjunta el soporte antes de marcarla como hecha.",
+        error: "Toda actividad exige al menos una evidencia para cerrarse: adjunta el soporte antes de marcarla como hecha.",
       };
     }
     // regla: bloquear exige motivo
@@ -225,6 +226,20 @@ export async function updateTask(
   if (patch.assigneeId && patch.assigneeId !== t.assigneeId) {
     changes.push(`responsable ${t.assigneeId} → ${patch.assigneeId}`);
     t.assigneeId = patch.assigneeId;
+  }
+
+  if (patch.coAssigneeIds !== undefined) {
+    // corresponsables: personas válidas, sin duplicados ni el principal
+    if (!Array.isArray(patch.coAssigneeIds) ||
+        patch.coAssigneeIds.some((p) => typeof p !== "string" || !PEOPLE.some((x) => x.id === p))) {
+      return { ok: false, status: 422, error: "Corresponsables inválidos: deben ser personas del directorio." };
+    }
+    const clean = [...new Set(patch.coAssigneeIds)].filter((p) => p !== t.assigneeId);
+    const before = (t.coAssigneeIds ?? []).join(",");
+    if (clean.join(",") !== before) {
+      changes.push(`corresponsables [${before || "—"}] → [${clean.join(",") || "—"}]`);
+      t.coAssigneeIds = clean;
+    }
   }
 
   if (patch.start && patch.start !== t.start) {
@@ -256,6 +271,7 @@ export async function updateTask(
         data: {
           status: t.status,
           assigneeId: t.assigneeId,
+          coAssigneeIds: t.coAssigneeIds ?? [],
           start: new Date(t.start),
           due: new Date(t.due),
           note: t.note,
