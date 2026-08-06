@@ -13,8 +13,10 @@ import { CMI_OBJECTIVES, responsible, type KpiFull } from "@/data/cmi";
 import { kpiHealth } from "@/lib/logic";
 import {
   X, User, Database, CalendarClock, Target, ListChecks, Sigma,
-  Loader2, PlusCircle, AlertTriangle,
+  Loader2, PlusCircle, AlertTriangle, Upload, FileDown, CheckCircle2,
 } from "lucide-react";
+import { periodIndex } from "@/lib/period";
+import { downloadCsv } from "@/lib/csv";
 
 const PERIOD_HINT: Record<KpiFull["frequency"], string> = {
   Mensual: "2027-T1", Trimestral: "2027-T2", Semestral: "2027-S1", Anual: "2027",
@@ -23,6 +25,8 @@ const PERIOD_HINT: Record<KpiFull["frequency"], string> = {
 export default function KpiPage() {
   const [lineFilter, setLineFilter] = useState<number | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const canReportAny = useCan("report_kpi");
 
   // serie efectiva: seed + valores reportados desde la plataforma
   const [eff, setEff] = useState<Record<string, { series: KpiFull["series"]; reported: string[] }>>({});
@@ -52,7 +56,21 @@ export default function KpiPage() {
   return (
     <>
       <PageHeader kicker="M4 · Indicadores" title="Indicadores de la educación digital"
-        desc="Cada indicador declara su definición operativa, su fórmula, quién produce el dato y con qué frecuencia. Clic en una tarjeta para abrir la ficha completa."  actions={<AccessChip module="kpi" />} />
+        desc="Cada indicador declara su definición operativa, su fórmula, quién produce el dato y con qué frecuencia. Clic en una tarjeta para abrir la ficha completa."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {canReportAny && (
+              <button onClick={() => setImporting((v) => !v)} className="btn-ghost !py-1.5 text-[12px]">
+                <Upload size={13} /> Importar CSV
+              </button>
+            )}
+            <AccessChip module="kpi" />
+          </div>
+        } />
+
+      {importing && canReportAny && (
+        <KpiImport onDone={refetch} onClose={() => setImporting(false)} />
+      )}
 
       <div className="rise mb-5 flex flex-wrap gap-2">
         <button onClick={() => setLineFilter(null)}
@@ -253,6 +271,155 @@ export default function KpiPage() {
         </div>
       </div>
     </>
+  );
+}
+
+/* ─── importador CSV de valores de KPI ─── */
+
+type ImportRow = {
+  code: string; period: string; value: number; note?: string;
+  problem?: string;                       // validación local
+  result?: "ok" | string;                 // resultado del servidor
+};
+
+function KpiImport({ onDone, onClose }: {
+  onDone: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const [rows, setRows] = useState<ImportRow[] | null>(null);
+  const [fileName, setFileName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const parse = async (file: File) => {
+    const text = await file.text();
+    const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) { setRows([]); return; }
+    const delim = lines[0].includes(";") ? ";" : ",";
+    const header = lines[0].toLowerCase().split(delim).map((h) => h.trim());
+    const idx = {
+      code: header.findIndex((h) => /c(ó|o)digo|code/.test(h)),
+      period: header.findIndex((h) => /periodo|period/.test(h)),
+      value: header.findIndex((h) => /valor|value/.test(h)),
+      note: header.findIndex((h) => /nota|note/.test(h)),
+    };
+    const parsed: ImportRow[] = lines.slice(1).map((l) => {
+      const cells = l.split(delim).map((c) => c.trim().replace(/^"|"$/g, ""));
+      const code = (cells[idx.code] ?? "").toUpperCase();
+      const period = cells[idx.period] ?? "";
+      const value = Number((cells[idx.value] ?? "").replace(",", "."));
+      const note = idx.note >= 0 ? cells[idx.note] || undefined : undefined;
+      const k = KPIS.find((x) => x.code === code);
+      const problem = !k ? `código desconocido (${code || "vacío"})`
+        : periodIndex(period) === 0 ? `periodo inválido (${period})`
+        : !Number.isFinite(value) || value < 0 ? "valor no numérico"
+        : undefined;
+      return { code, period, value, note, problem };
+    });
+    setRows(parsed);
+    setDone(false);
+  };
+
+  const valid = (rows ?? []).filter((r) => !r.problem);
+
+  const runImport = async () => {
+    setBusy(true);
+    const next = [...(rows ?? [])];
+    for (const r of next) {
+      if (r.problem) continue;
+      const res = await fetch("/api/td/kpi", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: r.code, period: r.period, value: r.value, note: r.note }),
+      });
+      r.result = res.ok ? "ok" : ((await res.json().catch(() => null))?.error ?? `Error ${res.status}`);
+      setRows([...next]);
+    }
+    await onDone();
+    setDone(true);
+    setBusy(false);
+  };
+
+  return (
+    <Card className="rise mb-5 ring-1 ring-cyan/40">
+      <div className="flex flex-wrap items-center gap-2.5 px-5 pb-2 pt-4">
+        <span className="p-title">Importar valores de KPI desde CSV</span>
+        <span className="p-sub">columnas: código · periodo · valor · nota (separador ; o ,)</span>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => downloadCsv("plantilla-kpi",
+              ["codigo", "periodo", "valor", "nota"],
+              [["AV-01", "2027-T2", 52, "corte del LMS"], ["IN-01", "2027-S1", 48, ""]])}
+            className="chip cursor-pointer"><FileDown size={10} /> Plantilla</button>
+          <button onClick={onClose} className="rounded-md p-1 text-faint hover:bg-surface-2 hover:text-ink">
+            <X size={15} />
+          </button>
+        </div>
+      </div>
+      <div className="space-y-3 px-5 pb-5">
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-surface-2 px-3 py-2.5 transition-colors hover:bg-cyan-wash">
+          <Upload size={13} className="shrink-0 text-cyan-deep" />
+          <span className={`min-w-0 flex-1 truncate text-[12px] ${fileName ? "font-semibold text-ink" : "text-muted"}`}>
+            {fileName || "Seleccionar archivo .csv…"}
+          </span>
+          <input type="file" accept=".csv,text/csv" className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) { setFileName(f.name); parse(f); }
+            }} />
+        </label>
+
+        {rows && (
+          <>
+            <div className="max-h-56 overflow-y-auto rounded-lg bg-surface-2/60">
+              <table className="w-full text-[11.5px]">
+                <thead>
+                  <tr className="border-b border-line-strong">
+                    {["Código", "Periodo", "Valor", "Estado"].map((h) => (
+                      <th key={h} className="label px-3 py-1.5 text-left !text-[8px]">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={i} className="border-b border-line last:border-0">
+                      <td className="num px-3 py-1 font-bold text-cyan-deep">{r.code || "—"}</td>
+                      <td className="num px-3 py-1 text-muted">{r.period || "—"}</td>
+                      <td className="num px-3 py-1 text-right font-semibold text-ink">
+                        {Number.isFinite(r.value) ? fmtNum(r.value, 2) : "—"}
+                      </td>
+                      <td className="px-3 py-1">
+                        {r.problem ? (
+                          <span className="text-[10.5px]" style={{ color: "var(--bad)" }}>{r.problem}</span>
+                        ) : r.result === "ok" ? (
+                          <span className="flex items-center gap-1 text-[10.5px]" style={{ color: "var(--ok)" }}>
+                            <CheckCircle2 size={10} /> importado
+                          </span>
+                        ) : r.result ? (
+                          <span className="text-[10.5px]" style={{ color: "var(--bad)" }}>{r.result}</span>
+                        ) : (
+                          <span className="text-[10.5px] text-muted">válida</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={runImport} disabled={busy || valid.length === 0 || done}
+                className="btn-primary !py-2 text-[12px] disabled:opacity-40">
+                {busy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                Importar {valid.length} válida{valid.length !== 1 ? "s" : ""}
+              </button>
+              <span className="text-[11px] text-faint">
+                {rows.length - valid.length > 0 && `${rows.length - valid.length} con problemas (no se importan) · `}
+                el servidor revalida permisos y reglas fila a fila
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    </Card>
   );
 }
 
