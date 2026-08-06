@@ -74,6 +74,26 @@ Las páginas consumen `logic.ts` directamente (server-side friendly) y la API
 expone lo mismo para clientes externos o para la migración a base de datos:
 al conectar Postgres solo cambia el origen de los datos, no las reglas.
 
+## Vista pública de solo lectura
+
+El botón «Vista pública» de la topbar genera un enlace firmado (HMAC del
+secreto del servidor) del tipo `/p/upc-<token>`, lo copia al portapapeles y lo
+abre. La página es un tablero ejecutivo sin sesión —madurez con serie, asuntos
+críticos, semáforo de KPI y cartera por riesgo— pensado para Consejo Superior,
+entes de control y acreditación. Un token inválido responde 404; rotar
+`AUTH_SECRET` invalida los enlaces emitidos.
+
+## Pruebas
+
+```bash
+npm test        # node:test + tsx — 18 pruebas del motor de lógica
+```
+
+Cubren: orden de periodos, semáforos y proyección lineal de KPI, rezago de
+captura por periodicidad, categorías de riesgo, ponderación de rachas,
+desalineación presupuestal, acciones vencidas, rollup de madurez, orden de
+alertas y consistencia del resumen ejecutivo.
+
 ## Datos demo a escala
 
 - 3 ciclos de medición (48 celdas) con serie institucional 1,50 → 1,94

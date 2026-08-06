@@ -13,6 +13,32 @@ import {
 import { AlgoritmoMark } from "@/components/logo";
 import { INSTITUTION } from "@/data/demo";
 
+function PublicLinkButton() {
+  const [state, setState] = useState<"idle" | "busy" | "copied">("idle");
+  const share = async () => {
+    setState("busy");
+    try {
+      const res = await fetch("/api/td/public-link");
+      const { url } = await res.json();
+      await navigator.clipboard.writeText(url);
+      setState("copied");
+      window.open(url, "_blank", "noopener");
+    } catch {
+      setState("idle");
+      return;
+    }
+    setTimeout(() => setState("idle"), 2500);
+  };
+  return (
+    <button onClick={share} disabled={state === "busy"}
+      className="btn-ghost hidden sm:inline-flex"
+      title="Genera el enlace público de solo lectura, lo copia al portapapeles y lo abre">
+      <Share2 size={13} />
+      {state === "copied" ? "Enlace copiado" : "Vista pública"}
+    </button>
+  );
+}
+
 const NAV = [
   { href: "/panel", label: "Panel", icon: LayoutDashboard },
   { href: "/panel/madurez", label: "Madurez", icon: Radar, code: "M1" },
@@ -148,9 +174,7 @@ export function AppShell({ children, user }: {
           </span>
 
           <div className="ml-auto flex items-center gap-2.5">
-            <button className="btn-ghost hidden sm:inline-flex" title="Generar enlace público de solo lectura">
-              <Share2 size={13} /> Vista pública
-            </button>
+            <PublicLinkButton />
             <div className="flex items-center gap-2.5 pl-1">
               <div className="grid h-8 w-8 place-items-center rounded-full text-[11px] font-bold text-white shadow-md"
                 style={{ background: "linear-gradient(135deg, var(--cyan-deep), var(--navy))" }}>

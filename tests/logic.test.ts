@@ -1,0 +1,203 @@
+// Pruebas del motor de lógica de negocio (node:test + tsx).
+// Ejecutar: npm test
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  periodIndex, kpiHealth, initiativeRisk, classifyFactor,
+  buildAlerts, maturityRollup, objectiveHealth, executiveSummary,
+  DEMO_NOW_INDEX,
+} from "../src/lib/logic";
+import { KPI_CATALOG, INITIATIVES_FULL, CMI_OBJECTIVES, type KpiFull, type InitiativeFull } from "../src/data/cmi";
+
+/* ─── periodIndex ─── */
+
+test("periodIndex ordena periodos anuales, semestrales y trimestrales", () => {
+  assert.ok(periodIndex("2026-T1") < periodIndex("2026-T2"));
+  assert.ok(periodIndex("2026-S1") < periodIndex("2026-S2"));
+  assert.ok(periodIndex("2025") < periodIndex("2026"));
+  assert.ok(periodIndex("2026-T4") > periodIndex("2026-S1"));
+  assert.equal(periodIndex("2026-T3"), 2026 * 12 + 8);
+});
+
+/* ─── kpiHealth ─── */
+
+const mkKpi = (over: Partial<KpiFull>): KpiFull => ({
+  code: "TST-01", line: 1, cmi: "OE-01", name: "Test", definition: "", formula: "",
+  unit: "%", frequency: "Trimestral", source: "t", ownerId: "R01",
+  baseline: 10, target: 100, goodDirection: "up",
+  series: [
+    { period: "2026-T1", value: 10 },
+    { period: "2026-T2", value: 20 },
+    { period: "2026-T3", value: 30 },
+    { period: "2026-T4", value: 40 },
+  ],
+  ...over,
+});
+
+test("kpiHealth: semáforo OK cuando está cerca de la meta", () => {
+  const h = kpiHealth(mkKpi({ target: 45 }));
+  assert.equal(h.semaphore, "OK");
+  assert.ok(h.improving);
+});
+
+test("kpiHealth: semáforo BAD lejos de la meta", () => {
+  const h = kpiHealth(mkKpi({ target: 400 }));
+  assert.equal(h.semaphore, "BAD");
+});
+
+test("kpiHealth: dirección down — bajar es mejorar", () => {
+  const h = kpiHealth(mkKpi({
+    goodDirection: "down", target: 5,
+    series: [
+      { period: "2026-T3", value: 18 },
+      { period: "2026-T4", value: 15 },
+    ],
+  }));
+  assert.ok(h.improving);
+  assert.equal(h.delta, -3);
+});
+
+test("kpiHealth: proyección lineal alcanza la meta con pendiente sostenida", () => {
+  // +10 por trimestre desde 40 en 2026-T4 → dic-2028 son 24 meses ≈ +80 → 120 ≥ 100
+  const h = kpiHealth(mkKpi({}));
+  assert.ok(h.projection.slopePerMonth > 3 && h.projection.slopePerMonth < 4);
+  assert.ok(h.projection.willReachTarget);
+});
+
+test("kpiHealth: proyección no alcanza cuando la pendiente es plana", () => {
+  const h = kpiHealth(mkKpi({
+    series: [
+      { period: "2026-T1", value: 30 },
+      { period: "2026-T2", value: 30 },
+      { period: "2026-T3", value: 31 },
+      { period: "2026-T4", value: 31 },
+    ],
+  }));
+  assert.ok(!h.projection.willReachTarget);
+});
+
+test("kpiHealth: rezago de captura respeta la periodicidad", () => {
+  // trimestral con último dato 2026-T2 (jun-2026); hoy demo = mar-2027 → 9 meses > 4.5 tolerados
+  const stale = kpiHealth(mkKpi({
+    series: [{ period: "2026-T1", value: 10 }, { period: "2026-T2", value: 12 }],
+  }));
+  assert.ok(stale.isStale);
+
+  // anual con dato de 2026 → tolerancia 18 meses → fresco
+  const fresh = kpiHealth(mkKpi({
+    frequency: "Anual",
+    series: [{ period: "2025", value: 10 }, { period: "2026", value: 12 }],
+  }));
+  assert.ok(!fresh.isStale);
+});
+
+/* ─── classifyFactor ─── */
+
+test("classifyFactor cubre las categorías de barreras", () => {
+  assert.equal(classifyFactor("Presupuesto de vigencia aprobado"), "Financiera");
+  assert.equal(classifyFactor("Adopción por parte de docentes"), "Cultural");
+  assert.equal(classifyFactor("Vacante del diseñador instruccional"), "Talento");
+  assert.equal(classifyFactor("Integración con registro académico"), "Tecnológica");
+  assert.equal(classifyFactor("Agenda del Consejo Superior"), "Gobernanza");
+});
+
+/* ─── initiativeRisk ─── */
+
+const mkIni = (over: Partial<InitiativeFull>): InitiativeFull => ({
+  id: "t1", line: 1, subsistema: "Formación", cmi: "OE-01", name: "Test",
+  objetivo: "", horizon: "CORTO", impact: 3, feasibility: 3, status: "EN_CURSO",
+  start: "2026-T3", end: "2027-T4", ownerId: "R01", metaResultado: "",
+  budgetPlanned: 100, budgetCommitted: 0, budgetExecuted: 50, progress: 50,
+  capability: "c1", kpi: "AV-01", actions: [], log: [],
+  nextMilestone: { date: "2027-06-01", text: "" },
+  factors: [],
+  ...over,
+});
+
+test("initiativeRisk: sin señales → riesgo bajo", () => {
+  const r = initiativeRisk(mkIni({}));
+  assert.equal(r.level, "BAJO");
+  assert.equal(r.score, 0);
+});
+
+test("initiativeRisk: racha roja pesa más que un rojo aislado", () => {
+  const single = initiativeRisk(mkIni({
+    factors: [{ name: "Presupuesto", state: "ROJO", history: ["VERDE", "ROJO"] }],
+  }));
+  const streak = initiativeRisk(mkIni({
+    factors: [{ name: "Presupuesto", state: "ROJO", history: ["ROJO", "ROJO"] }],
+  }));
+  assert.ok(streak.score > single.score);
+});
+
+test("initiativeRisk: desalineación presupuesto↔avance dispara driver financiero", () => {
+  const r = initiativeRisk(mkIni({ budgetExecuted: 80, budgetCommitted: 10, progress: 30 }));
+  assert.ok(r.drivers.some((d) => d.category === "Financiera"));
+  assert.ok(r.score > 0);
+});
+
+test("initiativeRisk: acciones con trimestre vencido suman riesgo", () => {
+  const r = initiativeRisk(mkIni({
+    actions: [
+      { name: "a", meta: "m", status: "PENDIENTE", quarter: "2026-T4" }, // vencida (hoy: mar-2027)
+      { name: "b", meta: "m", status: "HECHA", quarter: "2026-T3" },     // hecha: no cuenta
+    ],
+  }));
+  assert.ok(r.drivers.some((d) => d.text.includes("trimestre vencido")));
+});
+
+test("initiativeRisk: los datos reales de i1 e i5 producen riesgo alto o crítico", () => {
+  const i1 = INITIATIVES_FULL.find((i) => i.id === "i1")!;
+  const i5 = INITIATIVES_FULL.find((i) => i.id === "i5")!;
+  assert.ok(["ALTO", "CRÍTICO"].includes(initiativeRisk(i1).level));
+  assert.ok(["MEDIO", "ALTO", "CRÍTICO"].includes(initiativeRisk(i5).level));
+});
+
+/* ─── rollup y alertas ─── */
+
+test("maturityRollup: 16 celdas, serie creciente y sin celdas huérfanas", () => {
+  const r = maturityRollup();
+  assert.equal(r.cells.length, 16);
+  assert.equal(r.history.length, 2);
+  assert.ok(r.history[1].institution > r.history[0].institution);
+  assert.equal(r.cellsWithoutEvidence.length, 0);
+  assert.ok(Math.abs(r.institution.value - 1.94) < 0.01);
+});
+
+test("buildAlerts: ordenadas por severidad y con las rachas rojas presentes", () => {
+  const alerts = buildAlerts();
+  assert.ok(alerts.length > 0);
+  for (let i = 1; i < alerts.length; i++) {
+    assert.ok(alerts[i].severity >= alerts[i - 1].severity);
+  }
+  const rachas = alerts.filter((a) => a.kind === "FACTOR_RACHA_ROJA");
+  assert.equal(rachas.length, 2); // i1 (equipo TI) e i5 (presupuesto)
+  assert.ok(rachas.every((a) => a.severity === 1));
+});
+
+test("objectiveHealth cubre todos los objetivos sin lanzar", () => {
+  for (const o of CMI_OBJECTIVES) {
+    const h = objectiveHealth(o.id);
+    assert.ok(["OK", "WARN", "BAD"].includes(h.semaphore));
+  }
+});
+
+test("executiveSummary es consistente con los catálogos", () => {
+  const s = executiveSummary();
+  assert.equal(s.kpis.length, KPI_CATALOG.length);
+  assert.equal(s.initiatives.length, INITIATIVES_FULL.length);
+  assert.equal(s.objectives.length, CMI_OBJECTIVES.length);
+  assert.equal(
+    s.alertCounts.critical + s.alertCounts.warning + s.alertCounts.info,
+    s.alerts.length,
+  );
+  assert.ok(s.budget.planned > s.budget.executed + s.budget.committed);
+});
+
+/* ─── ancla temporal del demo ─── */
+
+test("DEMO_NOW_INDEX está en marzo de 2027", () => {
+  assert.equal(DEMO_NOW_INDEX, 2027 * 12 + 2);
+});
