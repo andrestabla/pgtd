@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Radar, Globe2, Network, Gauge, Map as MapIcon, ListChecks,
-  BarChart3, LayoutDashboard, LogOut, Menu, X, Share2, FlaskConical,
+  BarChart3, LayoutDashboard, LogOut, Menu, X, Share2, FlaskConical, KanbanSquare,
 } from "lucide-react";
 import { AlgoritmoMark } from "@/components/logo";
 import { INSTITUTION } from "@/data/demo";
@@ -47,6 +47,7 @@ const NAV = [
   { href: "/panel/kpi", label: "Indicadores", icon: Gauge, code: "M4" },
   { href: "/panel/ruta", label: "Ruta", icon: MapIcon, code: "M5" },
   { href: "/panel/iniciativas", label: "Iniciativas", icon: ListChecks, code: "M6" },
+  { href: "/panel/proyectos", label: "Proyectos", icon: KanbanSquare, code: "GP" },
   { href: "/panel/bi", label: "Inteligencia", icon: BarChart3, code: "M7" },
 ];
 

@@ -11,6 +11,7 @@ import {
   type KpiFull, type InitiativeFull,
 } from "@/data/cmi";
 import { LINES, DIMENSIONS } from "@/data/demo";
+import { taskAlerts } from "@/lib/proyectos";
 
 /* ═══ Utilidades de periodo ═══ */
 
@@ -282,7 +283,11 @@ export type Alert = {
     | "DESALINEACION_PRESUPUESTAL"
     | "ACCION_VENCIDA"
     | "CELDA_SIN_EVIDENCIA"
-    | "EVIDENCIA_SIN_VERIFICAR";
+    | "EVIDENCIA_SIN_VERIFICAR"
+    | "TAREA_VENCIDA"
+    | "TAREA_BLOQUEADA"
+    | "ENTREGABLE_SIN_EVIDENCIA"
+    | "DEPENDENCIA_VENCIDA";
   severity: 1 | 2 | 3;              // 1 = crítica
   title: string;
   detail: string;
@@ -292,6 +297,19 @@ export type Alert = {
 
 export function buildAlerts(): Alert[] {
   const alerts: Alert[] = [];
+
+  // tareas del gestor de proyectos (vencidas, bloqueadas, sin evidencia, en cadena)
+  for (const ta of taskAlerts()) {
+    alerts.push({
+      id: ta.id,
+      kind: ta.kind,
+      severity: ta.severity,
+      title: ta.title,
+      detail: ta.detail,
+      href: "/panel/proyectos",
+      owner: ta.ownerName,
+    });
+  }
 
   // factores en racha roja
   for (const i of INITIATIVES_FULL) {

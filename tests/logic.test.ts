@@ -452,3 +452,63 @@ test("estados de práctica: derivación D/I/K y distribución completa", () => {
   // la historia del diagnóstico: pocas prácticas integradas o con impacto
   assert.ok(counts.INTEGRACION + counts.IMPACTO < counts.DISPONIBILIDAD + counts.ADOPCION);
 });
+
+/* ─── gestor de proyectos ─── */
+
+import { TASKS, PEOPLE, isOverdue, DEMO_TODAY } from "../src/data/proyectos";
+import { taskAlerts, workload, initiativeTaskStats, portfolioTaskStats } from "../src/lib/proyectos";
+import { buildAlerts as buildAllAlerts } from "../src/lib/logic";
+
+test("proyectos: integridad referencial de tareas, personas y dependencias", () => {
+  const personIds = new Set(PEOPLE.map((p) => p.id));
+  const iniIds = new Set(INITIATIVES_FULL.map((i) => i.id));
+  const taskIds = new Set(TASKS.map((t) => t.id));
+  const evIds = new Set(EVIDENCES.map((e) => e.id));
+  for (const t of TASKS) {
+    assert.ok(personIds.has(t.assigneeId), `${t.id}: persona ${t.assigneeId}`);
+    assert.ok(iniIds.has(t.iniId), `${t.id}: iniciativa ${t.iniId}`);
+    assert.ok(t.start <= t.due, `${t.id}: inicio después del compromiso`);
+    for (const d of t.dependsOn ?? []) assert.ok(taskIds.has(d), `${t.id}: dependencia ${d}`);
+    for (const e of t.evidenceIds ?? []) assert.ok(evIds.has(e), `${t.id}: evidencia ${e}`);
+  }
+  assert.ok(TASKS.length >= 70, `volumen del plan: ${TASKS.length}`);
+});
+
+test("proyectos: toda iniciativa del roadmap tiene plan de trabajo", () => {
+  for (const i of INITIATIVES_FULL) {
+    assert.ok(initiativeTaskStats(i.id).total >= 3, `${i.id} sin tareas suficientes`);
+  }
+});
+
+test("proyectos: vencidas detectadas y con la historia esperada", () => {
+  const overdue = TASKS.filter(isOverdue);
+  assert.ok(overdue.length >= 3 && overdue.length <= 8, `vencidas: ${overdue.length}`);
+  const ids = overdue.map((t) => t.id);
+  assert.ok(ids.includes("T-i1-07"), "migración de Salud bloqueada y vencida");
+  assert.ok(ids.includes("T-i8-03"), "ANS en revisión jurídica vencidos");
+  // una tarea HECHA nunca está vencida
+  for (const t of TASKS.filter((t) => t.status === "HECHA")) assert.ok(!isOverdue(t), t.id);
+});
+
+test("proyectos: alertas de tareas tipificadas e integradas al motor global", () => {
+  const ta = taskAlerts();
+  assert.ok(ta.some((a) => a.kind === "TAREA_VENCIDA"));
+  assert.ok(ta.some((a) => a.kind === "TAREA_BLOQUEADA"));
+  assert.ok(ta.some((a) => a.kind === "DEPENDENCIA_VENCIDA"), "la cadena i1-07 → i1-08 debe alertar");
+  for (const a of ta) assert.ok(a.ownerName.includes(" "), "nombre propio en la alerta");
+  // integración: el motor global las incluye con href al gestor
+  const all = buildAllAlerts();
+  const fromTasks = all.filter((a) => a.href === "/panel/proyectos");
+  assert.equal(fromTasks.length, ta.length);
+  for (let i = 1; i < all.length; i++) assert.ok(all[i].severity >= all[i - 1].severity);
+});
+
+test("proyectos: carga por persona y estadísticas del portafolio consistentes", () => {
+  const w = workload();
+  assert.ok(w.length >= 10, "la mayoría del directorio tiene tareas");
+  const sumTotal = w.reduce((a, x) => a + x.total, 0);
+  assert.equal(sumTotal, TASKS.length);
+  const s = portfolioTaskStats();
+  assert.equal(Object.values(s.byStatus).reduce((a, b) => a + b, 0), s.total);
+  assert.ok(DEMO_TODAY.startsWith("2027-03"), "hoy demo coherente con DEMO_NOW_INDEX");
+});

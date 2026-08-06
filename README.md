@@ -26,6 +26,7 @@ sistema de gestión, no como documento.
 | M5 | Ruta — Gantt por trimestres + matriz impacto × factibilidad, ficha de iniciativa | ✅ |
 | M6 | Seguimiento — presupuesto en tres estados, factores críticos con historial | ✅ |
 | M7 | Inteligencia — puerta a los observatorios de Algoritmo T | ✅ (enlace) |
+| GP | Gestor de proyectos — 74 tareas con fechas, responsables con nombre propio, dependencias, evidencia por entregable; kanban, cronograma y carga por persona; alertas integradas | ✅ |
 
 ## Ejecutar
 

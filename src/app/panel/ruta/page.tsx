@@ -3,6 +3,7 @@
 // M5 · Mapa de ruta: Gantt por trimestres + matriz de priorización.
 
 import { useState } from "react";
+import Link from "next/link";
 import { PageHeader, Card, CardHeader, StatusChip } from "@/components/ui";
 import { GanttChart, PriorityMatrix } from "@/components/charts";
 import { INITIATIVES, LINES, fmtCOP } from "@/data/demo";
@@ -100,7 +101,13 @@ export default function RutaPage() {
       {/* detalle de iniciativa */}
       {ini && (
         <Card className="rise mb-5 border-cyan/40">
-          <CardHeader title={ini.name} sub="Ficha de la iniciativa" right={<StatusChip status={ini.status} />} />
+          <CardHeader title={ini.name} sub="Ficha de la iniciativa"
+            right={
+              <span className="flex items-center gap-2">
+                <Link href={`/panel/proyectos?ini=${ini.id}`} className="chip chip-cyan">Plan de trabajo →</Link>
+                <StatusChip status={ini.status} />
+              </span>
+            } />
           <div className="grid gap-x-8 gap-y-4 px-5 py-5 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <div className="label mb-1">Línea</div>

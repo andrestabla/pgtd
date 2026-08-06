@@ -11,6 +11,7 @@ import { BudgetBar } from "@/components/charts";
 import { INITIATIVES, fmtCOP } from "@/data/demo";
 import { CMI_OBJECTIVES, responsible, type ActionStatus } from "@/data/cmi";
 import { initiativeRisk } from "@/lib/logic";
+import { initiativeTaskStats } from "@/lib/proyectos";
 
 const RISK_CLS: Record<string, string> = {
   BAJO: "chip chip-ok", MEDIO: "chip", ALTO: "chip chip-warn", "CRÍTICO": "chip chip-bad",
@@ -74,6 +75,7 @@ export default function IniciativasPage() {
           const cmiObj = CMI_OBJECTIVES.find((o) => o.id === i.cmi);
           const done = i.actions.filter((a) => a.status === "HECHA").length;
           const risk = initiativeRisk(i);
+          const ts = initiativeTaskStats(i.id);
           return (
             <Card key={i.id} className={`rise rise-${Math.min(idx + 1, 4)} overflow-hidden ${isOpen ? "ring-1 ring-cyan/40" : ""}`}>
               {/* cabecera */}
@@ -90,6 +92,7 @@ export default function IniciativasPage() {
                   </div>
                   <div className="num mt-1 text-[10.5px] text-faint">
                     {owner.dependencia} · {i.start} → {i.end} · acciones {done}/{i.actions.length}
+                    {ts.total > 0 && <> · tareas {ts.done}/{ts.total}{ts.overdue > 0 && <span style={{ color: "var(--bad)" }}> · {ts.overdue} vencida{ts.overdue > 1 ? "s" : ""}</span>}</>}
                   </div>
                 </div>
                 <div className="hidden w-44 shrink-0 sm:block">
@@ -135,7 +138,14 @@ export default function IniciativasPage() {
                   <div className="grid gap-7 px-5 py-5 lg:grid-cols-2">
                     {/* acciones */}
                     <div>
-                      <div className="label mb-3">Acciones y metas de resultado</div>
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="label">Acciones y metas de resultado</span>
+                        {ts.total > 0 && (
+                          <Link href={`/panel/proyectos?ini=${i.id}`} className="chip chip-cyan">
+                            Plan de trabajo · {ts.total} tareas →
+                          </Link>
+                        )}
+                      </div>
                       <div className="space-y-2">
                         {i.actions.map((a) => {
                           const meta = ACTION_META[a.status];

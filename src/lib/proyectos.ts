@@ -1,0 +1,151 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// PGTD · Lógica del gestor de proyectos.
+// Alertas de tareas (vencidas, bloqueadas, entregables sin evidencia,
+// dependencias rotas), carga por persona y estadísticas por iniciativa.
+// Funciones puras sobre los datos de proyectos; cubiertas por tests.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import {
+  TASKS, PEOPLE, person, tasksOf, isOverdue, dueSoon, DEMO_TODAY,
+  type Task, type TaskStatus,
+} from "@/data/proyectos";
+import { INITIATIVES_FULL } from "@/data/cmi";
+
+/* ═══ Alertas de tareas ═══ */
+
+export type TaskAlert = {
+  id: string;
+  kind: "TAREA_VENCIDA" | "TAREA_BLOQUEADA" | "ENTREGABLE_SIN_EVIDENCIA" | "DEPENDENCIA_VENCIDA";
+  severity: 1 | 2 | 3;
+  taskId: string;
+  title: string;
+  detail: string;
+  ownerName: string;
+};
+
+const daysLate = (t: Task) =>
+  Math.round((new Date(DEMO_TODAY).getTime() - new Date(t.due).getTime()) / 86_400_000);
+
+export function taskAlerts(): TaskAlert[] {
+  const alerts: TaskAlert[] = [];
+  const byId = new Map(TASKS.map((t) => [t.id, t]));
+
+  for (const t of TASKS) {
+    const ini = INITIATIVES_FULL.find((i) => i.id === t.iniId)!;
+    const who = person(t.assigneeId).name;
+
+    if (isOverdue(t)) {
+      const late = daysLate(t);
+      alerts.push({
+        id: `tv-${t.id}`,
+        kind: "TAREA_VENCIDA",
+        severity: late > 21 ? 1 : 2,
+        taskId: t.id,
+        title: t.title,
+        detail: `Vencida hace ${late} día${late === 1 ? "" : "s"} en «${ini.name}».${t.note ? " " + t.note : ""}`,
+        ownerName: who,
+      });
+    }
+
+    if (t.status === "BLOQUEADA") {
+      alerts.push({
+        id: `tb-${t.id}`,
+        kind: "TAREA_BLOQUEADA",
+        severity: 2,
+        taskId: t.id,
+        title: t.title,
+        detail: `Bloqueada en «${ini.name}».${t.note ? " " + t.note : ""}`,
+        ownerName: who,
+      });
+    }
+
+    if (t.status === "HECHA" && t.requiresEvidence && !(t.evidenceIds?.length)) {
+      alerts.push({
+        id: `te-${t.id}`,
+        kind: "ENTREGABLE_SIN_EVIDENCIA",
+        severity: 3,
+        taskId: t.id,
+        title: t.title,
+        detail: `Cerrada sin evidencia adjunta en «${ini.name}»: el cierre exige soporte verificable.`,
+        ownerName: who,
+      });
+    }
+
+    // dependencia vencida: la tarea espera un prerrequisito que ya venció
+    if (t.status === "POR_HACER" && t.dependsOn?.length) {
+      const lateDep = t.dependsOn.map((d) => byId.get(d)).find((d) => d && isOverdue(d));
+      if (lateDep) {
+        alerts.push({
+          id: `td-${t.id}`,
+          kind: "DEPENDENCIA_VENCIDA",
+          severity: 3,
+          taskId: t.id,
+          title: t.title,
+          detail: `Su prerrequisito «${lateDep.title}» está vencido: el cronograma de «${ini.name}» se corre en cadena.`,
+          ownerName: who,
+        });
+      }
+    }
+  }
+  return alerts.sort((a, b) => a.severity - b.severity);
+}
+
+/* ═══ Carga por persona ═══ */
+
+export type Workload = {
+  personId: string;
+  name: string;
+  cargo: string;
+  open: number;        // tareas no cerradas
+  overdue: number;
+  dueSoon: number;     // vencen en ≤ 14 días
+  done: number;
+  total: number;
+};
+
+export function workload(): Workload[] {
+  return PEOPLE.map((p) => {
+    const mine = TASKS.filter((t) => t.assigneeId === p.id);
+    return {
+      personId: p.id,
+      name: p.name,
+      cargo: p.cargo,
+      open: mine.filter((t) => t.status !== "HECHA").length,
+      overdue: mine.filter(isOverdue).length,
+      dueSoon: mine.filter((t) => dueSoon(t)).length,
+      done: mine.filter((t) => t.status === "HECHA").length,
+      total: mine.length,
+    };
+  }).filter((w) => w.total > 0)
+    .sort((a, b) => b.overdue - a.overdue || b.open - a.open);
+}
+
+/* ═══ Estadísticas por iniciativa ═══ */
+
+export function initiativeTaskStats(iniId: string) {
+  const mine = tasksOf(iniId);
+  return {
+    total: mine.length,
+    done: mine.filter((t) => t.status === "HECHA").length,
+    overdue: mine.filter(isOverdue).length,
+    blocked: mine.filter((t) => t.status === "BLOQUEADA").length,
+    nextDue: mine
+      .filter((t) => t.status !== "HECHA" && !isOverdue(t))
+      .sort((a, b) => a.due.localeCompare(b.due))[0] ?? null,
+  };
+}
+
+export function portfolioTaskStats() {
+  const byStatus: Record<TaskStatus, number> = {
+    POR_HACER: 0, EN_CURSO: 0, EN_REVISION: 0, BLOQUEADA: 0, HECHA: 0,
+  };
+  for (const t of TASKS) byStatus[t.status]++;
+  return {
+    total: TASKS.length,
+    byStatus,
+    overdue: TASKS.filter(isOverdue).length,
+    dueSoon: TASKS.filter((t) => dueSoon(t)).length,
+    withEvidence: TASKS.filter((t) => (t.evidenceIds?.length ?? 0) > 0).length,
+    people: PEOPLE.filter((p) => TASKS.some((t) => t.assigneeId === p.id)).length,
+  };
+}

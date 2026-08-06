@@ -9,6 +9,7 @@ import {
 } from "../src/data/demo";
 import { RESPONSIBLES, CMI_OBJECTIVES } from "../src/data/cmi";
 import { PROGRAMS } from "../src/data/portfolio";
+import { PEOPLE, TASKS } from "../src/data/proyectos";
 
 const prisma = new PrismaClient();
 
@@ -184,6 +185,30 @@ async function main() {
       where: { institutionId_code_campus: { institutionId: inst.id, code: p.code, campus: p.campus } },
       update: {},
       create: { ...p, institutionId: inst.id },
+    });
+  }
+
+  // gestor de proyectos: personas y tareas
+  for (const p of PEOPLE) {
+    await prisma.person.upsert({ where: { id: p.id }, update: {}, create: { ...p } });
+  }
+  for (const t of TASKS) {
+    await prisma.projectTask.upsert({
+      where: { id: t.id },
+      update: {},
+      create: {
+        id: t.id,
+        iniCode: t.iniId,
+        title: t.title,
+        assigneeId: t.assigneeId,
+        start: new Date(t.start),
+        due: new Date(t.due),
+        status: t.status,
+        requiresEvidence: t.requiresEvidence ?? false,
+        evidenceIds: (t.evidenceIds ?? []) as never,
+        dependsOn: (t.dependsOn ?? []) as never,
+        note: t.note,
+      },
     });
   }
 
