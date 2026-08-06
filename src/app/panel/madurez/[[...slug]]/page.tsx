@@ -1,13 +1,14 @@
 "use client";
 
 // M1 · Diagnóstico de madurez.
-// Cuatro vistas: Resumen (radar + heatmap + ciclo), Variables (las 52
-// variables del instrumento con hallazgo, recomendación y evidencia),
-// Dominios (cortes temáticos: oferta, docentes, recursos, autoevaluación,
-// arquitectura, investigación) y Registros calificados (Decreto 1330).
+// Cinco vistas con ruta propia (/panel/madurez/<vista>): Resumen, Variables
+// (con ficha lateral por variable en /variables/<ID>), Dominios, Registros
+// calificados e Índices IES. La ficha de variable abre un panel lateral con
+// hallazgo, evidencia, protocolo y navegación anterior/siguiente.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { PageHeader, Card, CardHeader, LevelBadge, StateDot } from "@/components/ui";
 import { AccessChip } from "@/components/user-context";
 import { MaturityRadar, MaturityHeatmap, MiniRadar } from "@/components/charts";
@@ -25,9 +26,9 @@ import {
 import { ACTOR_GROUPS, responsesOf, topDissensus } from "@/data/actores";
 import { KPIS, INITIATIVES } from "@/data/demo";
 import {
-  FileText, X, CheckCircle2, Clock3, History, ChevronDown, BookOpenCheck,
+  FileText, X, CheckCircle2, Clock3, History, ChevronRight, BookOpenCheck,
   Search, Lightbulb, AlertCircle, Layers, ScrollText, Sigma, ShieldAlert, HelpCircle,
-  ClipboardList,
+  ClipboardList, ArrowLeft, ArrowRight,
 } from "lucide-react";
 
 const LEVEL_BG = ["", "var(--n1)", "var(--n2)", "var(--n3)", "var(--n4)", "var(--n5)"];
@@ -57,19 +58,58 @@ const DIM_SHORT: Record<string, string> = {
   organizacional: "Org.", misional: "Mis.", tecnologica: "Tec.", datos: "Dat.",
 };
 
+// segmento de ruta ↔ vista: /panel/madurez/<segmento>[/<ID de variable>]
+const SEG_BY_TAB: Record<Tab, string> = {
+  resumen: "resumen", variables: "variables", dominios: "dominios",
+  registros: "registros", ies: "indices",
+};
+const TAB_BY_SEG: Record<string, Tab> = {
+  resumen: "resumen", variables: "variables", dominios: "dominios",
+  registros: "registros", indices: "ies", ies: "ies",
+};
+
+// Los filtros sobreviven a la navegación entre rutas del módulo (la página se
+// remonta al cambiar de segmento; este caché evita perder el contexto).
+const FILTERS: {
+  cell: { line: number; dim: string } | null;
+  line: number | null;
+  frame: Frame | null;
+  onlyGaps: boolean;
+} = { cell: null, line: null, frame: null, onlyGaps: false };
+
 export default function MadurezPage() {
-  const [tab, setTab] = useState<Tab>("resumen");
-  const [cellFilter, setCellFilter] = useState<{ line: number; dim: string } | null>(null);
-  const [lineFilter, setLineFilter] = useState<number | null>(null);
-  const [frameFilter, setFrameFilter] = useState<Frame | null>(null);
-  const [onlyGaps, setOnlyGaps] = useState(false);
-  const [openVar, setOpenVar] = useState<string | null>(null);
+  const router = useRouter();
+  const params = useParams<{ slug?: string[] }>();
+  const slug = params.slug ?? [];
+
+  // la vista y la variable abierta viven en la URL
+  const tab: Tab = TAB_BY_SEG[(slug[0] ?? "resumen").toLowerCase()] ?? "resumen";
+  const openVarId = tab === "variables" && slug[1]
+    ? decodeURIComponent(slug[1]).toUpperCase()
+    : null;
+
+  const [cellFilter, setCellState] = useState(FILTERS.cell);
+  const [lineFilter, setLineState] = useState(FILTERS.line);
+  const [frameFilter, setFrameState] = useState(FILTERS.frame);
+  const [onlyGaps, setGapsState] = useState(FILTERS.onlyGaps);
+  const setCellFilter = (v: typeof FILTERS.cell) => { FILTERS.cell = v; setCellState(v); };
+  const setLineFilter = (v: number | null) => { FILTERS.line = v; setLineState(v); };
+  const setFrameFilter = (v: Frame | null) => { FILTERS.frame = v; setFrameState(v); };
+  const setOnlyGaps = (v: boolean) => { FILTERS.onlyGaps = v; setGapsState(v); };
+
+  const go = (path: string) => router.push(path, { scroll: false });
+  const navTab = (t: Tab) => {
+    if (t !== "variables") setCellFilter(null);
+    go(`/panel/madurez/${SEG_BY_TAB[t]}`);
+  };
+  const openVariable = (id: string) => go(`/panel/madurez/variables/${id}`);
+  const closeVariable = () => go("/panel/madurez/variables");
 
   const openCell = (line: number, dim: string) => {
     setCellFilter({ line, dim });
     setLineFilter(null);
     setFrameFilter(null);
-    setTab("variables");
+    go("/panel/madurez/variables");
   };
 
   const filteredVars = useMemo(() => {
@@ -95,7 +135,7 @@ export default function MadurezPage() {
       <div className="rise mb-6 flex flex-wrap gap-1.5 rounded-2xl bg-surface-2 p-1.5">
         {TABS.map((t) => (
           <button key={t.id}
-            onClick={() => { setTab(t.id); if (t.id !== "variables") setCellFilter(null); }}
+            onClick={() => navTab(t.id)}
             className={`flex items-center gap-2 rounded-xl px-4 py-2 text-[12.5px] font-bold transition-all ${
               tab === t.id ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"
             }`}>
@@ -286,8 +326,8 @@ export default function MadurezPage() {
           <div className="space-y-2.5">
             {filteredVars.map((v, idx) => (
               <VariableRow key={v.id} v={v} idx={idx}
-                open={openVar === v.id}
-                onToggle={() => setOpenVar(openVar === v.id ? null : v.id)} />
+                active={openVarId === v.id}
+                onOpen={() => openVariable(v.id)} />
             ))}
             {filteredVars.length === 0 && (
               <p className="rounded-xl bg-surface-2 px-5 py-6 text-center text-[13px] italic text-faint">
@@ -296,6 +336,12 @@ export default function MadurezPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* ficha lateral de variable — /panel/madurez/variables/<ID> */}
+      {openVarId && (
+        <VariableSheet id={openVarId} list={filteredVars}
+          onClose={closeVariable} onNav={openVariable} />
       )}
 
       {/* ═══════════ DOMINIOS ═══════════ */}
@@ -344,7 +390,7 @@ export default function MadurezPage() {
                   <div className="space-y-1">
                     {vars.map((v) => (
                       <button key={v.id}
-                        onClick={() => { setTab("variables"); setCellFilter(null); setLineFilter(null); setFrameFilter(null); setOnlyGaps(false); setOpenVar(v.id); }}
+                        onClick={() => { setCellFilter(null); setLineFilter(null); setFrameFilter(null); setOnlyGaps(false); openVariable(v.id); }}
                         className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2">
                         <span className="num w-[64px] shrink-0 text-[9px] font-bold text-cyan-deep">{v.id}</span>
                         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink">{v.name}</span>
@@ -792,19 +838,17 @@ function IesView() {
   );
 }
 
-/* ─── fila expandible de variable ─── */
+/* ─── fila compacta: abre la ficha lateral (/panel/madurez/variables/<ID>) ─── */
 
-function VariableRow({ v, idx, open, onToggle }: {
-  v: Variable; idx: number; open: boolean; onToggle: () => void;
+function VariableRow({ v, idx, active, onOpen }: {
+  v: Variable; idx: number; active: boolean; onOpen: () => void;
 }) {
   const line = LINES.find((l) => l.n === v.line)!;
   const dim = DIMENSIONS.find((d) => d.key === v.dimension)!;
   const gap = gapOf(v);
-  const evidences = EVIDENCES.filter((e) => v.evidenceIds.includes(e.id));
-  const owner = responsible(v.ownerId);
   return (
-    <Card className={`rise rise-${Math.min((idx % 4) + 1, 4)} overflow-hidden ${open ? "ring-1 ring-cyan/40" : ""}`}>
-      <button onClick={onToggle}
+    <Card className={`rise rise-${Math.min((idx % 4) + 1, 4)} overflow-hidden ${active ? "ring-1 ring-cyan/40" : ""}`}>
+      <button onClick={onOpen}
         className="flex w-full items-center gap-3.5 px-4 py-3 text-left transition-colors hover:bg-surface-2/50">
         <span className="num w-[70px] shrink-0 text-[10px] font-bold text-cyan-deep">{v.id}</span>
         <div className="min-w-0 flex-1">
@@ -826,12 +870,105 @@ function VariableRow({ v, idx, open, onToggle }: {
         <span className={`chip shrink-0 ${gap >= 3 ? "chip-bad" : gap === 2 ? "chip-warn" : gap <= 0 ? "chip-ok" : ""}`}>
           {gap <= 0 ? "En meta" : `Brecha ${gap}`}
         </span>
-        <ChevronDown size={15} className={`shrink-0 text-faint transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronRight size={15} className="shrink-0 text-faint" />
       </button>
+    </Card>
+  );
+}
 
-      {open && (
-        <>
-        <div className="grid gap-5 border-t border-line px-5 py-4 lg:grid-cols-2">
+/* ─── ficha lateral de variable ─── */
+
+function VariableSheet({ id, list, onClose, onNav }: {
+  id: string;
+  list: Variable[];                 // lista filtrada vigente (para anterior/siguiente)
+  onClose: () => void;
+  onNav: (id: string) => void;
+}) {
+  const v = VARIABLES.find((x) => x.id === id) ?? null;
+
+  // navegación dentro de la lista filtrada; si la variable no está en el
+  // filtro (enlace profundo), se navega sobre el banco completo
+  const navList = v && list.some((x) => x.id === v.id) ? list : VARIABLES;
+  const idx = v ? navList.findIndex((x) => x.id === v.id) : -1;
+  const prev = idx > 0 ? navList[idx - 1] : null;
+  const next = idx >= 0 && idx < navList.length - 1 ? navList[idx + 1] : null;
+
+  // Escape cierra · flechas navegan · scroll del fondo bloqueado
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft" && prev) onNav(prev.id);
+      if (e.key === "ArrowRight" && next) onNav(next.id);
+    };
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose, onNav, prev, next]);
+
+  if (!v) {
+    return (
+      <div className="fixed inset-0 z-50">
+        <div className="absolute inset-0 bg-navy-deep/40 backdrop-blur-[2px]" onClick={onClose} />
+        <div className="absolute inset-y-0 right-0 w-full max-w-md bg-surface p-8 shadow-2xl">
+          <p className="text-[13px] text-muted">
+            La variable <b className="num">{id}</b> no existe en el instrumento.
+          </p>
+          <button onClick={onClose} className="btn-ghost mt-4">Volver a variables</button>
+        </div>
+      </div>
+    );
+  }
+
+  const line = LINES.find((l) => l.n === v.line)!;
+  const dim = DIMENSIONS.find((d) => d.key === v.dimension)!;
+  const gap = gapOf(v);
+  const evidences = EVIDENCES.filter((e) => v.evidenceIds.includes(e.id));
+  const owner = responsible(v.ownerId);
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-navy-deep/40 backdrop-blur-[2px]" onClick={onClose} />
+      <aside className="absolute inset-y-0 right-0 flex w-full max-w-[860px] flex-col bg-bg shadow-2xl"
+        role="dialog" aria-label={`Variable ${v.id}`}>
+
+        {/* cabecera */}
+        <div className="flex items-center gap-3 border-b border-line bg-surface px-6 py-3.5">
+          <div className="min-w-0 flex-1">
+            <div className="num text-[10px] font-bold text-cyan-deep">
+              {v.id} <span className="text-faint">· {line.code} {line.short} · {dim.name}</span>
+            </div>
+            <h2 className="truncate text-[16px] font-extrabold tracking-tight text-ink">{v.name}</h2>
+          </div>
+          <span className="chip !py-0 !text-[8.5px]" style={{ color: FRAME_COLORS[v.frame] }}>{v.frame}</span>
+          <span className="num shrink-0 rounded-lg px-2 py-1 text-[13px] font-extrabold text-white"
+            style={{ background: LEVEL_BG[v.value] }}>{v.value}</span>
+          <span className={`chip shrink-0 ${gap >= 3 ? "chip-bad" : gap === 2 ? "chip-warn" : gap <= 0 ? "chip-ok" : ""}`}>
+            {gap <= 0 ? "En meta" : `Brecha ${gap}`}
+          </span>
+          <span className="mx-1 h-5 w-px bg-line-strong" />
+          <button onClick={() => prev && onNav(prev.id)} disabled={!prev}
+            title={prev ? `${prev.id} · ${prev.name}` : undefined}
+            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-30">
+            <ArrowLeft size={16} />
+          </button>
+          <span className="num text-[10px] text-faint">{idx + 1}/{navList.length}</span>
+          <button onClick={() => next && onNav(next.id)} disabled={!next}
+            title={next ? `${next.id} · ${next.name}` : undefined}
+            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-30">
+            <ArrowRight size={16} />
+          </button>
+          <button onClick={onClose} title="Cerrar (Esc)"
+            className="ml-1 rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink">
+            <X size={17} />
+          </button>
+        </div>
+
+        {/* cuerpo */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="grid gap-5 px-6 py-5 lg:grid-cols-2">
           <div>
             <p className="mb-3 text-[12.5px] leading-relaxed text-muted">{v.desc}</p>
             <div className="mb-3 flex items-center gap-3">
@@ -926,10 +1063,12 @@ function VariableRow({ v, idx, open, onToggle }: {
             </div>
           </div>
         </div>
-        <ProtocolBlock v={v} />
-        </>
-      )}
-    </Card>
+        <div className="mx-6 mb-6 overflow-hidden rounded-xl bg-surface shadow-sm">
+          <ProtocolBlock v={v} />
+        </div>
+        </div>
+      </aside>
+    </div>
   );
 }
 

@@ -1,14 +1,16 @@
 "use client";
 
-// Shell v2: rail oscuro con indicador de gradiente, topbar con contexto
-// del módulo activo y píldora única de modo demo.
+// Shell v2: rail oscuro contraíble con indicador de gradiente, topbar con
+// contexto del módulo activo y píldora única de modo demo. El estado de
+// colapso persiste en localStorage (pgtd-rail).
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Radar, Globe2, Network, Gauge, Map as MapIcon, ListChecks,
   BarChart3, LayoutDashboard, LogOut, Menu, X, Share2, FlaskConical, KanbanSquare, BookOpen,
+  PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { AlgoritmoMark } from "@/components/logo";
 import { INSTITUTION } from "@/data/demo";
@@ -59,6 +61,9 @@ const ROLE_LABEL: Record<string, string> = {
   DIRECTIVO: "Directivo",
 };
 
+const RAIL_W = 232;
+const RAIL_W_MIN = 76;
+
 export function AppShell({ children, user }: {
   children: ReactNode;
   user: { name: string; role: string };
@@ -66,6 +71,17 @@ export function AppShell({ children, user }: {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  // el colapso persiste; se lee tras montar para no romper la hidratación
+  useEffect(() => {
+    setCollapsed(localStorage.getItem("pgtd-rail") === "1");
+  }, []);
+  const toggleRail = () =>
+    setCollapsed((c) => {
+      localStorage.setItem("pgtd-rail", c ? "0" : "1");
+      return !c;
+    });
 
   const current = NAV.slice().reverse().find((n) =>
     n.href === "/panel" ? pathname === "/panel" : pathname.startsWith(n.href));
@@ -76,27 +92,30 @@ export function AppShell({ children, user }: {
     router.refresh();
   };
 
-  const nav = (
-    <nav className="flex flex-col gap-1 px-3">
-      <div className="label mb-1 px-3 !text-white/30">Módulos</div>
+  const navItems = (mini: boolean) => (
+    <nav className={`flex flex-col gap-1 ${mini ? "px-2.5" : "px-3"}`}>
+      {!mini && <div className="label mb-1 px-3 !text-white/30">Módulos</div>}
       {NAV.map((item) => {
         const active = item.href === "/panel"
           ? pathname === "/panel"
           : pathname.startsWith(item.href);
         return (
           <Link key={item.href} href={item.href} onClick={() => setOpen(false)}
-            className={`group relative flex items-center gap-3 rounded-xl px-3 py-[9px] text-[13px] font-medium transition-all duration-150 ${
+            title={mini ? item.label : undefined}
+            className={`group relative flex items-center rounded-xl text-[13px] font-medium transition-all duration-150 ${
+              mini ? "justify-center px-0 py-[10px]" : "gap-3 px-3 py-[9px]"
+            } ${
               active
                 ? "bg-white/[0.09] text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]"
-                : "text-white/50 hover:translate-x-[2px] hover:bg-white/[0.05] hover:text-white/85"
+                : "text-white/50 hover:bg-white/[0.05] hover:text-white/85" + (mini ? "" : " hover:translate-x-[2px]")
             }`}>
             {active && (
               <span className="spine absolute left-0 top-1/2 h-[58%] w-[3px] -translate-y-1/2 rounded-r-full" />
             )}
-            <item.icon size={16} strokeWidth={active ? 2.4 : 1.9}
+            <item.icon size={mini ? 18 : 16} strokeWidth={active ? 2.4 : 1.9}
               className={active ? "text-cyan-fill" : ""} />
-            <span className="flex-1">{item.label}</span>
-            {item.code && (
+            {!mini && <span className="flex-1">{item.label}</span>}
+            {!mini && item.code && (
               <span className={`num text-[9px] tracking-wider ${active ? "text-cyan-fill/90" : "text-white/25"}`}>
                 {item.code}
               </span>
@@ -110,31 +129,45 @@ export function AppShell({ children, user }: {
   return (
     <div className="flex min-h-screen">
       {/* rail escritorio */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[232px] flex-col lg:flex"
-        style={{ background: "var(--grad-deep)" }}>
+      <aside
+        className="fixed inset-y-0 left-0 z-40 hidden flex-col transition-[width] duration-200 lg:flex"
+        style={{ background: "var(--grad-deep)", width: collapsed ? RAIL_W_MIN : RAIL_W }}>
         <div aria-hidden className="pointer-events-none absolute inset-0"
           style={{ background: "radial-gradient(420px 220px at 100% 0%, rgb(79 208 236 / 0.09), transparent 60%)" }} />
-        <div className="relative flex items-center gap-2.5 px-5 pb-6 pt-5">
+        <div className={`relative flex items-center pb-6 pt-5 ${collapsed ? "justify-center px-0" : "gap-2.5 px-5"}`}>
           <AlgoritmoMark size={27} />
-          <div className="leading-tight">
-            <div className="text-[13.5px] font-extrabold tracking-tight text-white">PGTD</div>
-            <div className="text-[8.5px] font-semibold uppercase tracking-[0.16em] text-white/35">
-              Algoritmo T
+          {!collapsed && (
+            <div className="leading-tight">
+              <div className="text-[13.5px] font-extrabold tracking-tight text-white">PGTD</div>
+              <div className="text-[8.5px] font-semibold uppercase tracking-[0.16em] text-white/35">
+                Algoritmo T
+              </div>
             </div>
-          </div>
+          )}
         </div>
-        <div className="relative">{nav}</div>
-        <div className="relative mt-auto px-4 pb-4">
-          <div className="mb-3 overflow-hidden rounded-xl bg-white/[0.05] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)]">
-            <div className="spine h-[2.5px]" />
-            <div className="px-4 py-3">
-              <div className="text-[12.5px] font-bold text-white">{INSTITUTION.shortName}</div>
-              <div className="mt-0.5 text-[10.5px] leading-snug text-white/40">{INSTITUTION.name}</div>
+        <div className="relative">{navItems(collapsed)}</div>
+        <div className={`relative mt-auto pb-4 ${collapsed ? "px-2.5" : "px-4"}`}>
+          {!collapsed && (
+            <div className="mb-3 overflow-hidden rounded-xl bg-white/[0.05] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.07)]">
+              <div className="spine h-[2.5px]" />
+              <div className="px-4 py-3">
+                <div className="text-[12.5px] font-bold text-white">{INSTITUTION.shortName}</div>
+                <div className="mt-0.5 text-[10.5px] leading-snug text-white/40">{INSTITUTION.name}</div>
+              </div>
             </div>
-          </div>
+          )}
+          <button onClick={toggleRail}
+            title={collapsed ? "Expandir menú" : "Contraer menú"}
+            className={`flex w-full items-center rounded-xl py-2 text-[12.5px] font-medium text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white ${
+              collapsed ? "justify-center px-0" : "gap-2.5 px-3"}`}>
+            {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+            {!collapsed && "Contraer menú"}
+          </button>
           <button onClick={logout}
-            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[12.5px] font-medium text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white">
-            <LogOut size={14} /> Cerrar sesión
+            title={collapsed ? "Cerrar sesión" : undefined}
+            className={`flex w-full items-center rounded-xl py-2 text-[12.5px] font-medium text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white ${
+              collapsed ? "justify-center px-0" : "gap-2.5 px-3"}`}>
+            <LogOut size={14} /> {!collapsed && "Cerrar sesión"}
           </button>
         </div>
       </aside>
@@ -152,13 +185,14 @@ export function AppShell({ children, user }: {
               </div>
               <button onClick={() => setOpen(false)} className="text-white/60"><X size={18} /></button>
             </div>
-            {nav}
+            {navItems(false)}
           </aside>
         </div>
       )}
 
       {/* contenido */}
-      <div className="flex min-w-0 flex-1 flex-col lg:pl-[232px]">
+      <div className={`flex min-w-0 flex-1 flex-col transition-[padding] duration-200 ${
+        collapsed ? "lg:pl-[76px]" : "lg:pl-[232px]"}`}>
         <header className="sticky top-0 z-30 flex h-[54px] items-center gap-3 border-b border-line/70 bg-white/70 px-4 backdrop-blur-xl sm:px-7">
           <button onClick={() => setOpen(true)} className="text-muted lg:hidden"><Menu size={19} /></button>
 
