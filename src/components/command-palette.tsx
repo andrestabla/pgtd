@@ -95,6 +95,9 @@ function buildIndex(): Entry[] {
     ["Iniciativas (M6)", "seguimiento profundo", "/panel/iniciativas"],
     ["Proyectos (GP)", "plan de trabajo", "/panel/proyectos"],
     ["Inteligencia (M7)", "BI institucional", "/panel/bi"],
+    ["Informe ejecutivo", "pieza imprimible para comité", "/panel/informe/ejecutivo"],
+    ["Analítica del programa", "tendencias, presupuesto y carga", "/panel/informe/analitica"],
+    ["Comparativo de mediciones", "vigente vs. anterior, celda a celda", "/panel/informe/comparativo"],
     ["Metodología", "convenciones y fórmulas", "/panel/metodologia"],
   ];
   for (const [title, sub, href] of MODULES) {

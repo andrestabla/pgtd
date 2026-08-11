@@ -243,8 +243,11 @@ body {
 /* ─── movimiento ─── */
 
 /* ─── impresión: el informe ejecutivo se imprime limpio ─── */
+.only-print { display: none; }
+
 @media print {
   aside, header, footer, .no-print { display: none !important; }
+  .only-print { display: block !important; }
   main { max-width: 100% !important; padding: 0 !important; }
   body { background: white !important; }
   .panel { box-shadow: none !important; border: 1px solid var(--line-strong) !important; break-inside: avoid; }
