@@ -11,21 +11,25 @@ const OBSERVATORIES = [
     icon: Database, title: "Oferta educativa",
     desc: "Programas de educación superior (SNIES) por institución, área, nivel, modalidad y territorio, con mapas.",
     tags: ["27.005 programas", "357 IES"],
+    href: "https://www.algoritmot.com/bi/oferta",
   },
   {
     icon: Briefcase, title: "Laboral y empleabilidad",
     desc: "Competencias demandadas, reskilling, empleabilidad y vinculación formal de graduados.",
     tags: ["OLE", "DANE", "OIT"],
+    href: "https://www.algoritmot.com/bi/laboral",
   },
   {
     icon: MapIcon, title: "Análisis regional",
     desc: "Pertinencia territorial, vacíos de oferta, demanda potencial por cohortes y recomendación de programas.",
     tags: ["33 departamentos", "Cohortes"],
+    href: "https://www.algoritmot.com/bi/regional",
   },
   {
     icon: FileOutput, title: "Espacio de trabajo",
     desc: "Informes propios combinando oferta, demanda y recomendaciones, exportables en PDF y CSV.",
     tags: ["Autonomía"],
+    href: "https://www.algoritmot.com/bi/workspace",
   },
 ];
 
@@ -47,9 +51,10 @@ export default function BiPage() {
             <div className="mt-3 flex flex-wrap gap-1.5">
               {o.tags.map((t) => <span key={t} className="chip">{t}</span>)}
             </div>
-            <div className="mt-4 inline-flex cursor-pointer items-center gap-1.5 text-[13px] font-bold text-cyan-deep">
+            <a href={o.href} target="_blank" rel="noreferrer"
+              className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-bold text-cyan-deep hover:underline">
               Abrir observatorio <ExternalLink size={13} />
-            </div>
+            </a>
           </Card>
         ))}
       </div>
