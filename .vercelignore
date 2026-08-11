@@ -1,0 +1,8 @@
+.env*
+var
+docs
+tests
+Artículos base
+*.pdf
+/back.jpg
+Iniciar PGTD.command
